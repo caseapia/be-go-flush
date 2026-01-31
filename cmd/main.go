@@ -33,7 +33,7 @@ func main() {
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000",
-		AllowMethods: "GET,POST,PUT,DELETE",
+		AllowMethods: "GET,POST,PUT,DELETE,PATCH",
 	}))
 
 	// * repositories
@@ -41,8 +41,8 @@ func main() {
 	loggerRepo := config.NewLoggerRepository() // logger repository
 
 	// * services
-	loggerSrv := loggerService.NewLoggerService(loggerRepo)    // logs service
-	userSrv := userService.NewUserService(userRepo, loggerSrv) // user service
+	loggerSrv := loggerService.NewLoggerService(loggerRepo, userRepo) // logs service
+	userSrv := userService.NewUserService(userRepo, loggerSrv)        // user service
 
 	// * handlers
 	userHandler := userHandler.NewUserHandler(userSrv)         // user handler

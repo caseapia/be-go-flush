@@ -1,5 +1,5 @@
 package config
 
-func AppConfig() {
-
+type AppConfig struct {
+	APP_MODE string
 }

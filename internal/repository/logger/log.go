@@ -14,9 +14,16 @@ func (l *LoggerRepository) Log(
 ) error {
 	entry.CreatedAt = time.Now()
 
-	_, err := l.db.NewInsert().
+	res, err := l.db.NewInsert().
 		Model(entry).
 		Exec(ctx)
+	if err != nil {
+		slog.Error("failed to insert action log:", err)
+		return err
+	}
+
+	affected, _ := res.RowsAffected()
+	slog.Debugf("Inserted %d rows in action_logs", affected)
 
 	slog.WithData(slog.M{
 		"entryData": entry,

@@ -1,4 +1,4 @@
-package service
+package userservice
 
 import (
 	"context"
@@ -39,7 +39,7 @@ func (s *UserService) BanUser(
 	_ = s.logger.Log(
 		ctx,
 		adminID,
-		userID,
+		&userID,
 		loggermodule.Ban,
 		"Reason: "+reason,
 	)
@@ -76,7 +76,7 @@ func (s *UserService) UnbanUser(
 	_ = s.logger.Log(
 		ctx,
 		adminID,
-		userID,
+		&userID,
 		loggermodule.Unban,
 	)
 

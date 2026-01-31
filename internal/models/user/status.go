@@ -7,22 +7,24 @@ import (
 type UserStatus int
 
 const (
-	Player      UserStatus = 0
-	Tester      UserStatus = 1
-	TrialAdmin  UserStatus = 2
-	AdminLvl1   UserStatus = 3
-	AdminLvl2   UserStatus = 4
-	SeniorAdmin UserStatus = 5
-	LeadAdmin   UserStatus = 6
-	Manager     UserStatus = 7
+	Player UserStatus = iota
+	Tester
+	TrialAdmin
+	AdminLvl1
+	AdminLvl2
+	SeniorAdmin
+	LeadAdmin
+	Manager
+	TotalStatuses
 )
 
 type DeveloperStatus int
 
 const (
-	NotDeveloper  DeveloperStatus = 0
-	Developer     DeveloperStatus = 1
-	LeadDeveloper DeveloperStatus = 2
+	NotDeveloper DeveloperStatus = iota
+	Developer
+	LeadDeveloper
+	WebDeveloper
 )
 
 func (s UserStatus) String() string {
@@ -48,6 +50,21 @@ func (s UserStatus) String() string {
 	}
 }
 
+func (s DeveloperStatus) String() string {
+	switch s {
+	case NotDeveloper:
+		return "Not Developer"
+	case Developer:
+		return "Developer"
+	case LeadDeveloper:
+		return "Lead Developer"
+	case WebDeveloper:
+		return "Web Developer"
+	default:
+		return "Unknown"
+	}
+}
+
 func ParseUserStatus(s string) (UserStatus, error) {
 	switch s {
 	case "0":
@@ -66,6 +83,21 @@ func ParseUserStatus(s string) (UserStatus, error) {
 		return LeadAdmin, nil
 	case "7":
 		return Manager, nil
+	default:
+		return 0, UserError.UserInvalidStatus()
+	}
+}
+
+func ParseDeveloperStatus(s string) (DeveloperStatus, error) {
+	switch s {
+	case "0":
+		return NotDeveloper, nil
+	case "1":
+		return Developer, nil
+	case "2":
+		return LeadDeveloper, nil
+	case "3":
+		return WebDeveloper, nil
 	default:
 		return 0, UserError.UserInvalidStatus()
 	}

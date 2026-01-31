@@ -19,3 +19,10 @@ func CannotChangeStatusOfDeletedUser() *pkgerror.AppError {
 		Message: errormodel.ErrAdminCannotChangeStatusOfDeletedUser,
 	}
 }
+
+func MaxValueExceeded() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusNotAcceptable,
+		Message: errormodel.ErrAdminMaxValueExceeded,
+	}
+}

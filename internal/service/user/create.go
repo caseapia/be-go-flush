@@ -1,4 +1,4 @@
-package service
+package userservice
 
 import (
 	"context"
@@ -37,7 +37,7 @@ func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) 
 		return nil, UserError.UserAlreadyExists()
 	}
 
-	_ = s.logger.Log(ctx, uint64(adminID), 0, loggermodule.Create, "as user "+name)
+	_ = s.logger.Log(ctx, uint64(adminID), nil, loggermodule.Create, "as user "+name)
 
 	return user, nil
 }

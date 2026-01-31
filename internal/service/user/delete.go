@@ -1,4 +1,4 @@
-package service
+package userservice
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func (s *UserService) DeleteUser(ctx context.Context, id uint64) (*models.User, 
 		return nil, err
 	}
 
-	_ = s.logger.Log(ctx, 0, id, loggermodule.SoftDelete)
+	_ = s.logger.Log(ctx, 0, &id, loggermodule.SoftDelete)
 
 	return user, nil
 }
@@ -46,7 +46,7 @@ func (s *UserService) RestoreUser(ctx context.Context, id uint64) (*models.User,
 		return nil, err
 	}
 
-	_ = s.logger.Log(ctx, 0, id, loggermodule.RestoreUser)
+	_ = s.logger.Log(ctx, 0, &id, loggermodule.RestoreUser)
 
 	return user, nil
 }

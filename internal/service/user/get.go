@@ -1,4 +1,4 @@
-package service
+package userservice
 
 import (
 	"context"
@@ -17,7 +17,7 @@ func (s *UserService) GetUser(ctx context.Context, id uint64) (*models.User, err
 		return nil, UserError.UserNotFound()
 	}
 
-	_ = s.logger.Log(ctx, 0, id, loggermodule.SearchByUserID)
+	_ = s.logger.Log(ctx, 0, &id, loggermodule.SearchByUserID)
 
 	return user, nil
 }
@@ -28,7 +28,7 @@ func (s *UserService) GetUsersList(ctx context.Context) ([]models.User, error) {
 		return nil, err
 	}
 
-	_ = s.logger.Log(ctx, 0, 0, loggermodule.SearchByAllUsers)
+	_ = s.logger.Log(ctx, 0, nil, loggermodule.SearchByAllUsers)
 
 	return users, nil
 }

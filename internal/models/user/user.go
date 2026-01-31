@@ -4,11 +4,10 @@ import (
 	"time"
 
 	AdminError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/admin"
-
 )
 
 type User struct {
-	ID        uint64          `bun:"id,pk,autoincrement" json:"id"`
+	ID        uint64          `bun:"id,pk,autoincrement,unique" json:"id"`
 	Name      string          `bun:"name,unique,notnull" json:"name"`
 	IsBanned  bool            `bun:"is_banned" json:"isBanned,omitempty"`
 	BanReason *string         `bun:"ban_reason" json:"banReason,omitempty"`

@@ -3,7 +3,6 @@ package userhandler
 import (
 	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
@@ -17,7 +16,7 @@ func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&input); err != nil {
-		return fiber.ErrBadRequest
+		return err
 	}
 
 	status, err := usermodel.ParseUserStatus(input.Status)
