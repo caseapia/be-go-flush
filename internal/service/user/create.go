@@ -5,20 +5,20 @@ import (
 
 	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
+	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
 func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) (*models.User, error) {
 	existing, err := s.repo.GetByName(ctx, name)
 
-	// Errors handling
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil {
-		return nil, ErrUserAlreadyExists
+		return nil, UserError.UserAlreadyExists()
 	}
 	if name == "" || len(name) < 3 || len(name) > 30 {
-		return nil, ErrInvalidUserName
+		return nil, UserError.UserInvalidUsername()
 	}
 
 	user := &models.User{Name: name}
@@ -34,7 +34,7 @@ func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) 
 	}
 
 	if newUser != nil {
-		return nil, ErrUserAlreadyExists
+		return nil, UserError.UserAlreadyExists()
 	}
 
 	_ = s.logger.Log(ctx, uint64(adminID), 0, loggermodule.Create, "as user "+name)

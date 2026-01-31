@@ -5,6 +5,7 @@ import (
 	"time"
 
 	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
+	"github.com/gookit/slog"
 )
 
 func (l *LoggerRepository) Log(
@@ -17,5 +18,8 @@ func (l *LoggerRepository) Log(
 		Model(entry).
 		Exec(ctx)
 
+	slog.WithData(slog.M{
+		"entryData": entry,
+	}).Debugf("action add in action_logs table")
 	return err
 }

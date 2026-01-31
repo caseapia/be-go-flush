@@ -1,20 +1,6 @@
-package loggermodule
+package loggermodel
 
 import "time"
-
-type LoggerAction string
-
-const (
-	Ban              LoggerAction = "has banned"
-	Unban            LoggerAction = "has unbanned"
-	Create           LoggerAction = "has created"
-	SoftDelete       LoggerAction = "has soft-deleted"
-	RestoreUser      LoggerAction = "has restored"
-	SearchByUsername LoggerAction = "searched by username"
-	SearchByUserID   LoggerAction = "searched by user ID"
-	SearchByAllUsers LoggerAction = "searched all users"
-	SearchLogs       LoggerAction = "searched logs"
-)
 
 type ActionLog struct {
 	ID             uint64       `bun:"id,pk,autoincrement" json:"id"`

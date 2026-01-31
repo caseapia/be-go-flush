@@ -1,4 +1,4 @@
-package handler
+package userhandler
 
 import "github.com/gofiber/fiber/v2"
 
@@ -8,9 +8,10 @@ func RegisterRoutes(app fiber.Router, h *UserHandler) {
 
 	users.Get("/", h.GetUsersList)
 	user.Get("/:id", h.GetUser)
-	user.Put("/ban/:id", h.BanUser)
-	user.Delete("/unban/:id", h.UnbanUser)
-	user.Put("/create/", h.CreateUser)
-	user.Delete("/delete/:id", h.DeleteUser)
-	user.Post("/restore/:id", h.RestoreUser)
+	user.Put("/admin/:id/ban", h.BanUser)
+	user.Delete("/admin/:id/unban", h.UnbanUser)
+	user.Put("/admin/create/", h.CreateUser)
+	user.Delete("/admin/:id/delete", h.DeleteUser)
+	user.Post("/admin/:id/restore", h.RestoreUser)
+	user.Patch("/admin/:id/setStatus", h.SetUserStatus)
 }

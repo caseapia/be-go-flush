@@ -1,4 +1,4 @@
-package handler
+package userhandler
 
 import service "github.com/caseapia/goproject-flush/internal/service/user"
 

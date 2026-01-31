@@ -5,6 +5,7 @@ import (
 
 	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
+	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
 func (s *UserService) GetUser(ctx context.Context, id uint64) (*models.User, error) {
@@ -13,7 +14,7 @@ func (s *UserService) GetUser(ctx context.Context, id uint64) (*models.User, err
 		return nil, err
 	}
 	if user == nil || user.IsDeleted {
-		return nil, ErrUserNotFound
+		return nil, UserError.UserNotFound()
 	}
 
 	_ = s.logger.Log(ctx, 0, id, loggermodule.SearchByUserID)

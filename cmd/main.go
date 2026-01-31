@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/caseapia/goproject-flush/config"
@@ -10,9 +11,17 @@ import (
 	userService "github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gookit/slog"
 )
 
 func main() {
+	// * configuration
+	slog.Configure(func(logger *slog.SugaredLogger) {
+		f := logger.Formatter.(*slog.TextFormatter)
+		f.EnableColor = true
+	})
+	slog.SetFormatter(slog.NewJSONFormatter())
+
 	config.LoadEnv()
 	config.Connect()
 
@@ -22,21 +31,35 @@ func main() {
 
 	app := fiber.New()
 
-	// репозитории
-	userRepo := config.NewUserRepository()
-	loggerRepo := config.NewLoggerRepository()
-
-	// сервисы
-	loggerSrv := loggerService.NewLoggerService(loggerRepo)    // сервис логов
-	userSrv := userService.NewUserService(userRepo, loggerSrv) // сервис пользователей с логированием
-
-	userHandler := userHandler.NewUserHandler(userSrv)
-	loggerHandler := loggerhandler.NewLoggerHandler(loggerSrv)
-
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000",
 		AllowMethods: "GET,POST,PUT,DELETE",
 	}))
+
+	// * repositories
+	userRepo := config.NewUserRepository()     // user repository
+	loggerRepo := config.NewLoggerRepository() // logger repository
+
+	// * services
+	loggerSrv := loggerService.NewLoggerService(loggerRepo)    // logs service
+	userSrv := userService.NewUserService(userRepo, loggerSrv) // user service
+
+	// * handlers
+	userHandler := userHandler.NewUserHandler(userSrv)         // user handler
+	loggerHandler := loggerhandler.NewLoggerHandler(loggerSrv) // logger handler
+
+	// * initializaiton logs
+	slog.WithData(slog.M{
+		"userRepo":    fmt.Sprintf("%T", userRepo),
+		"userSrv":     fmt.Sprintf("%T", userSrv),
+		"userHandler": fmt.Sprintf("%T", userHandler),
+	}).Debug("user dependencies initialized")
+
+	slog.WithData(slog.M{
+		"loggerRepo":    fmt.Sprintf("%T", loggerRepo),
+		"loggerSrv":     fmt.Sprintf("%T", loggerSrv),
+		"loggerHandler": fmt.Sprintf("%T", loggerHandler),
+	}).Debug("logger dependencies initialized")
 
 	config.SetupRoutes(app, userHandler, loggerHandler)
 

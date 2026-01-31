@@ -6,6 +6,7 @@ import (
 
 	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
+	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
 func (s *UserService) BanUser(
@@ -15,15 +16,16 @@ func (s *UserService) BanUser(
 	reason string,
 ) (*models.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
+
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
-		return nil, ErrUserNotFound
+		return nil, UserError.UserNotFound()
 	}
 
 	if user.IsBanned {
-		return nil, ErrUserBanned
+		return nil, UserError.UserBanned()
 	}
 
 	user.IsBanned = true
@@ -51,15 +53,16 @@ func (s *UserService) UnbanUser(
 	userID uint64,
 ) (*models.User, error) {
 	user, err := s.repo.GetByID(ctx, userID)
+
 	if err != nil {
 		return nil, err
 	}
 	if user == nil {
-		return nil, ErrUserNotFound
+		return nil, UserError.UserNotFound()
 	}
 
 	if !user.IsBanned {
-		return nil, ErrUserNotBanned
+		return nil, UserError.UserNotBanned()
 	}
 
 	user.IsBanned = false

@@ -1,9 +1,8 @@
-package handler
+package userhandler
 
 import (
 	"strconv"
 
-	service "github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -19,13 +18,7 @@ func (h *UserHandler) BanUser(c *fiber.Ctx) error {
 	user, err := h.service.BanUser(c.UserContext(), uint64(0), uint64(id), input.Reason)
 
 	if err != nil {
-		status := fiber.StatusNotFound
-
-		if err == service.ErrUserBanned {
-			status = fiber.StatusForbidden
-		}
-
-		return c.Status(status).JSON(fiber.Map{"error": err.Error()})
+		return err
 	}
 
 	return c.JSON(user)

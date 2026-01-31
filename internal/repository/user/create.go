@@ -3,10 +3,10 @@ package repository
 import (
 	"context"
 
-	models "github.com/caseapia/goproject-flush/internal/models/user"
+	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 )
 
-func (r *UserRepository) Create(ctx context.Context, user *models.User) error {
+func (r *UserRepository) Create(ctx context.Context, user *usermodel.User) error {
 	_, err := r.db.NewInsert().
 		Model(user).
 		Exec(ctx)

@@ -1,9 +1,6 @@
-package handler
+package userhandler
 
 import (
-	"errors"
-
-	service "github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -19,11 +16,7 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 	user, err := h.service.CreateUser(c.UserContext(), 0, input.Name)
 
 	if err != nil {
-		if errors.Is(err, service.ErrUserAlreadyExists) {
-			return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "username already exists"})
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err})
+		return err
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(user)
