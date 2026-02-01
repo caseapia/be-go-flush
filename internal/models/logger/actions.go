@@ -8,6 +8,7 @@ const (
 	Unban        LoggerAction = "has unbanned"
 	Create       LoggerAction = "has created"
 	SoftDelete   LoggerAction = "has soft-deleted"
+	HardDelete   LoggerAction = "has hard-deleted"
 	RestoreUser  LoggerAction = "has restored"
 	SetAdmin     LoggerAction = "has set admin perm"
 	SetDeveloper LoggerAction = "has set developer perm"

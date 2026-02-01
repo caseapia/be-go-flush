@@ -7,7 +7,16 @@ import (
 )
 
 func (r *UserRepository) Delete(ctx context.Context, user *models.User) error {
-	_, err := r.db.NewDelete().
+	if user.IsDeleted {
+		_, err := r.db.NewDelete().
+			Model(user).
+			WherePK().
+			Exec(ctx)
+		return err
+	}
+
+	user.IsDeleted = true
+	_, err := r.db.NewUpdate().
 		Model(user).
 		WherePK().
 		Exec(ctx)

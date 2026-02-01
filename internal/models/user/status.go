@@ -65,23 +65,23 @@ func (s DeveloperStatus) String() string {
 	}
 }
 
-func ParseUserStatus(s string) (UserStatus, error) {
+func ParseUserStatus(s int64) (UserStatus, error) {
 	switch s {
-	case "0":
+	case 0:
 		return Player, nil
-	case "1":
+	case 1:
 		return Tester, nil
-	case "2":
+	case 2:
 		return TrialAdmin, nil
-	case "3":
+	case 3:
 		return AdminLvl1, nil
-	case "4":
+	case 4:
 		return AdminLvl2, nil
-	case "5":
+	case 5:
 		return SeniorAdmin, nil
-	case "6":
+	case 6:
 		return LeadAdmin, nil
-	case "7":
+	case 7:
 		return Manager, nil
 	default:
 		return 0, UserError.UserInvalidStatus()

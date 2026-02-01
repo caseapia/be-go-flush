@@ -14,8 +14,18 @@ func (s *UserService) DeleteUser(ctx context.Context, id uint64) (*models.User, 
 	if err != nil {
 		return nil, err
 	}
-	if user == nil || user.IsDeleted {
-		return nil, UserError.UserNotFound()
+	if user == nil {
+		return user, UserError.UserNotFound()
+	}
+
+	if user.IsDeleted {
+		_ = s.logger.Log(ctx, 0, &id, loggermodule.HardDelete)
+
+		if err := s.repo.Delete(ctx, user); err != nil {
+			return nil, err
+		}
+
+		return nil, nil
 	}
 
 	user.IsDeleted = true
