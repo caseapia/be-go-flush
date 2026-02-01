@@ -13,5 +13,6 @@ func RegisterRoutes(app fiber.Router, h *UserHandler) {
 	user.Put("/admin/create/", h.CreateUser)
 	user.Delete("/admin/:id/delete", h.DeleteUser)
 	user.Post("/admin/:id/restore", h.RestoreUser)
-	user.Patch("/admin/:id/setStatus", h.SetUserStatus)
+	user.Patch("/admin/:id/setStatus/user", h.SetUserStatus)
+	user.Patch("/admin/:id/setStatus/developer", h.SetDeveloper)
 }

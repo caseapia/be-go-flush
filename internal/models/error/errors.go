@@ -9,6 +9,7 @@ const (
 	ErrUserNotBanned     ErrorMessage = "user is not banned"
 	ErrInvalidUserName   ErrorMessage = "invalid username"
 	ErrInvalidUserStatus ErrorMessage = "invalid user status"
+	ErrReasonRequired    ErrorMessage = "reason field required"
 )
 
 const (

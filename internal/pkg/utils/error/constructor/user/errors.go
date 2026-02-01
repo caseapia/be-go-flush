@@ -47,3 +47,10 @@ func UserInvalidStatus() *pkgerror.AppError {
 		Message: errormodel.ErrInvalidUserStatus,
 	}
 }
+
+func UserReasonRequired() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusBadRequest,
+		Message: errormodel.ErrReasonRequired,
+	}
+}

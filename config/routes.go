@@ -1,13 +1,16 @@
 package config
 
 import (
-	loggerHandler "github.com/caseapia/goproject-flush/internal/handler/logger"
-	userHandler "github.com/caseapia/goproject-flush/internal/handler/user"
+	adminmodule "github.com/caseapia/goproject-flush/internal/module/admin"
+	loggermodule "github.com/caseapia/goproject-flush/internal/module/logger"
+	usermodule "github.com/caseapia/goproject-flush/internal/module/user"
 	"github.com/gofiber/fiber/v2"
 )
 
-func SetupRoutes(app *fiber.App, userH *userHandler.UserHandler, loggerH *loggerHandler.LoggerHandler) {
+func SetupRoutes(app *fiber.App, userM *usermodule.UserModule, loggerM *loggermodule.LoggerModule, adminM *adminmodule.AdminModule) {
 	api := app.Group("/api")
-	userHandler.RegisterRoutes(api, userH)
-	loggerHandler.RegisterRoutes(api, loggerH)
+
+	userM.RegisterRoutes(api)
+	loggerM.RegisterRoutes(api)
+	adminM.RegisterRoutes(api)
 }

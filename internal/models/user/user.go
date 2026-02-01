@@ -25,16 +25,30 @@ func (User) TableName() string {
 
 func (u *User) SetStatus(
 	newStatus UserStatus,
-) error {
+) (*User, error) {
 	if u.Status == newStatus {
-		return AdminError.StatusAlreadySet()
+		return nil, AdminError.StatusAlreadySet()
 	}
 	if u.IsDeleted {
-		return AdminError.CannotChangeStatusOfDeletedUser()
+		return nil, AdminError.CannotChangeStatusOfDeletedUser()
 	}
 
 	u.Status = newStatus
 	u.UpdatedAt = time.Now()
 
-	return nil
+	return u, nil
+}
+
+func (u *User) SetDeveloper(newStatus DeveloperStatus) (*User, error) {
+	if u.Status == UserStatus(newStatus) {
+		return nil, AdminError.StatusAlreadySet()
+	}
+	if u.IsDeleted {
+		return nil, AdminError.CannotChangeStatusOfDeletedUser()
+	}
+
+	u.Developer = newStatus
+	u.UpdatedAt = time.Now()
+
+	return u, nil
 }

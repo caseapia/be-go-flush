@@ -15,7 +15,7 @@ func (s *UserService) SetStatus(ctx context.Context, userID uint64, status userm
 	if err != nil {
 		return nil, err
 	}
-	if err := u.SetStatus(status); err != nil {
+	if _, err := u.SetStatus(status); err != nil {
 		return nil, err
 	}
 
@@ -40,6 +40,9 @@ func (s *UserService) SetDeveloper(ctx context.Context, userID uint64, status us
 	u, err := s.repo.GetByID(ctx, userID)
 
 	if err != nil {
+		return nil, err
+	}
+	if _, err := u.SetDeveloper(status); err != nil {
 		return nil, err
 	}
 

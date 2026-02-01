@@ -88,15 +88,15 @@ func ParseUserStatus(s int64) (UserStatus, error) {
 	}
 }
 
-func ParseDeveloperStatus(s string) (DeveloperStatus, error) {
+func ParseDeveloperStatus(s int64) (DeveloperStatus, error) {
 	switch s {
-	case "0":
+	case 0:
 		return NotDeveloper, nil
-	case "1":
+	case 1:
 		return Developer, nil
-	case "2":
+	case 2:
 		return LeadDeveloper, nil
-	case "3":
+	case 3:
 		return WebDeveloper, nil
 	default:
 		return 0, UserError.UserInvalidStatus()
