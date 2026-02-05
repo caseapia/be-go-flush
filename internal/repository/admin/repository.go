@@ -1,4 +1,4 @@
-package adminrepository
+package AdminRepository
 
 import "github.com/uptrace/bun"
 

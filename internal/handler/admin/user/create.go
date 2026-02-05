@@ -1,10 +1,10 @@
-package userhandler
+package AdminUserHandler
 
 import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
+func (h *AdminUserHandler) CreateUser(c *fiber.Ctx) error {
 	var input struct {
 		Name string `json:"name"`
 	}

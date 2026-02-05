@@ -1,4 +1,4 @@
-package errormodel
+package ErrorModel
 
 type ErrorMessage string
 
@@ -16,4 +16,5 @@ const (
 	ErrAdminStatusAlreadySet                ErrorMessage = "admin status is already set to the specified value"
 	ErrAdminCannotChangeStatusOfDeletedUser ErrorMessage = "cannot change status of a deleted user"
 	ErrAdminMaxValueExceeded                ErrorMessage = "admin max value exceeded"
+	ErrAdminManagerRankCannotBeChanged      ErrorMessage = "manager rank cannot be changed"
 )

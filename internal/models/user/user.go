@@ -1,4 +1,4 @@
-package usermodel
+package UserModel
 
 import (
 	"time"
@@ -7,48 +7,36 @@ import (
 )
 
 type User struct {
-	ID        uint64          `bun:"id,pk,autoincrement,unique" json:"id"`
-	Name      string          `bun:"name,unique,notnull" json:"name"`
-	IsBanned  bool            `bun:"is_banned" json:"isBanned,omitempty"`
-	BanReason *string         `bun:"ban_reason" json:"banReason,omitempty"`
-	IsDeleted bool            `bun:"is_deleted" json:"isDeleted,omitempty"`
-	Status    UserStatus      `bun:"status,notnull,default:0" json:"status"`
-	Developer DeveloperStatus `bun:"developer,notnull,default:0" json:"developer"`
-	CreatedAt time.Time       `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
-	UpdatedAt time.Time       `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
-	DeletedAt *time.Time      `bun:"deleted_at,nullzero" json:"-"`
+	ID            uint64     `bun:"id,pk,autoincrement,unique" json:"id"`
+	Name          string     `bun:"name,unique,notnull" json:"name"`
+	IsBanned      bool       `bun:"is_banned" json:"isBanned,omitempty"`
+	BanReason     *string    `bun:"ban_reason" json:"banReason,omitempty"`
+	IsDeleted     bool       `bun:"is_deleted" json:"isDeleted,omitempty"`
+	StaffRank     int        `bun:"staff_rank" json:"staffRank"`
+	DeveloperRank int        `bun:"developer_rank" json:"developerRank"`
+	CreatedAt     time.Time  `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
+	UpdatedAt     time.Time  `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
+	DeletedAt     *time.Time `bun:"deleted_at,nullzero" json:"-"`
 }
 
 func (User) TableName() string {
 	return "users"
 }
 
-func (u *User) SetStatus(
-	newStatus UserStatus,
-) (*User, error) {
-	if u.Status == newStatus {
-		return nil, AdminError.StatusAlreadySet()
-	}
+func (u *User) SetStaffRank(rank int) (*User, error) {
 	if u.IsDeleted {
 		return nil, AdminError.CannotChangeStatusOfDeletedUser()
 	}
-
-	u.Status = newStatus
+	u.StaffRank = rank
 	u.UpdatedAt = time.Now()
-
 	return u, nil
 }
 
-func (u *User) SetDeveloper(newStatus DeveloperStatus) (*User, error) {
-	if u.Status == UserStatus(newStatus) {
-		return nil, AdminError.StatusAlreadySet()
-	}
+func (u *User) SetDeveloperRank(rank int) (*User, error) {
 	if u.IsDeleted {
 		return nil, AdminError.CannotChangeStatusOfDeletedUser()
 	}
-
-	u.Developer = newStatus
+	u.DeveloperRank = rank
 	u.UpdatedAt = time.Now()
-
 	return u, nil
 }

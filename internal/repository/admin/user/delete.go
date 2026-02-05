@@ -1,12 +1,12 @@
-package repository
+package AdminUserRepository
 
 import (
 	"context"
 
-	models "github.com/caseapia/goproject-flush/internal/models/user"
+	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 )
 
-func (r *UserRepository) Delete(ctx context.Context, user *models.User) error {
+func (r *AdminUserRepository) Delete(ctx context.Context, user *usermodel.User) error {
 	if user.IsDeleted {
 		_, err := r.db.NewDelete().
 			Model(user).
@@ -23,7 +23,7 @@ func (r *UserRepository) Delete(ctx context.Context, user *models.User) error {
 	return err
 }
 
-func (r *UserRepository) Restore(ctx context.Context, user *models.User) error {
+func (r *AdminUserRepository) Restore(ctx context.Context, user *usermodel.User) error {
 	_, err := r.db.NewUpdate().
 		Model(user).
 		WherePK().

@@ -1,4 +1,4 @@
-package rankshandler
+package AdminRanksHandler
 
 import (
 	"github.com/gofiber/fiber/v2"

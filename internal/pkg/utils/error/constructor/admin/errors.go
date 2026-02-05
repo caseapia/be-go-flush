@@ -26,3 +26,10 @@ func MaxValueExceeded() *pkgerror.AppError {
 		Message: errormodel.ErrAdminMaxValueExceeded,
 	}
 }
+
+func ManagerRankCannotBeChanged() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusForbidden,
+		Message: errormodel.ErrAdminManagerRankCannotBeChanged,
+	}
+}

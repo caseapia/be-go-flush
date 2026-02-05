@@ -1,4 +1,4 @@
-package loggerhandler
+package LoggerHandler
 
 import "github.com/gofiber/fiber/v2"
 

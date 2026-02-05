@@ -1,4 +1,4 @@
-package loggerrepository
+package LoggerRepository
 
 import (
 	"github.com/uptrace/bun"

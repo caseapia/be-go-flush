@@ -1,4 +1,4 @@
-package loggermodel
+package LoggerModel
 
 import (
 	"time"

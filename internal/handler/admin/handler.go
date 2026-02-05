@@ -1,4 +1,4 @@
-package adminhandler
+package AdminHandler
 
 import (
 	adminservice "github.com/caseapia/goproject-flush/internal/service/admin"

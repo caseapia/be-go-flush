@@ -1,4 +1,4 @@
-package loggerhandler
+package LoggerHandler
 
 import service "github.com/caseapia/goproject-flush/internal/service/logger"
 

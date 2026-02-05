@@ -1,4 +1,4 @@
-package UserModule
+package usermodule
 
 import (
 	UserHandler "github.com/caseapia/goproject-flush/internal/handler/user"

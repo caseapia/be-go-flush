@@ -1,4 +1,4 @@
-package repository
+package AdminUserRepository
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 )
 
-func (r *UserRepository) Create(ctx context.Context, user *usermodel.User) error {
+func (r *AdminUserRepository) Create(ctx context.Context, user *usermodel.User) error {
 	_, err := r.db.NewInsert().
 		Model(user).
 		Exec(ctx)

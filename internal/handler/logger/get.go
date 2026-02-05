@@ -1,4 +1,4 @@
-package loggerhandler
+package LoggerHandler
 
 import (
 	"log"

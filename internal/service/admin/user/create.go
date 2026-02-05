@@ -1,14 +1,14 @@
-package userservice
+package AdminUserService
 
 import (
 	"context"
 
-	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
+	loggermodel "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
-func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) (*models.User, error) {
+func (s *AdminUserService) CreateUser(ctx context.Context, adminID int, name string) (*models.User, error) {
 	existing, err := s.repo.GetByName(ctx, name)
 
 	if err != nil {
@@ -23,7 +23,7 @@ func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) 
 
 	user := &models.User{Name: name}
 
-	if err := s.repo.Create(ctx, user); err != nil {
+	if err := s.adminUser.Create(ctx, user); err != nil {
 		return nil, err
 	}
 
@@ -37,7 +37,7 @@ func (s *UserService) CreateUser(ctx context.Context, adminID int, name string) 
 		return nil, UserError.UserAlreadyExists()
 	}
 
-	_ = s.logger.Log(ctx, uint64(adminID), nil, loggermodule.Create, "as user "+name)
+	_ = s.logger.Log(ctx, uint64(adminID), nil, loggermodel.Create, "as "+name)
 
 	return user, nil
 }

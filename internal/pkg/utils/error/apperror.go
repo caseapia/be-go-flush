@@ -1,4 +1,4 @@
-package pkgerror
+package PkgError
 
 import (
 	errormodel "github.com/caseapia/goproject-flush/internal/models/error"

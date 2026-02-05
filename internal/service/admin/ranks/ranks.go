@@ -1,4 +1,4 @@
-package ranksservice
+package AdminRanksService
 
 import (
 	"context"
@@ -6,11 +6,10 @@ import (
 	ranksmodel "github.com/caseapia/goproject-flush/internal/models/admin/ranks"
 )
 
-func (s *RanksService) GetRanksList(ctx context.Context) ([]ranksmodel.Ranks, error) {
-	ranks, err := s.repo.GetAll(ctx)
-	if err != nil {
-		return nil, err
-	}
+func (s *RanksService) GetRanksList(ctx context.Context) ([]ranksmodel.Rank, error) {
+	return s.repo.GetAll(ctx)
+}
 
-	return ranks, nil
+func (s *RanksService) GetByID(ctx context.Context, id int) (*ranksmodel.Rank, error) {
+	return s.repo.GetByID(ctx, id)
 }

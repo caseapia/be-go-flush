@@ -1,12 +1,11 @@
-package userhandler
+package AdminRanksHandler
 
 import (
-	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
 
-func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
+func (h *RanksHandler) SetStaffRank(c *fiber.Ctx) error {
 	userID, err := c.ParamsInt("id")
 	if err != nil {
 		slog.Debugf("SetUserStatusError: %v", err)
@@ -14,7 +13,7 @@ func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
 	}
 
 	var input struct {
-		Status int64 `json:"status"`
+		Status int `json:"status"`
 	}
 
 	if err := c.BodyParser(&input); err != nil {
@@ -22,16 +21,10 @@ func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
-	status, err := usermodel.ParseUserStatus(input.Status)
-	if err != nil {
-		slog.Debugf("SetUserStatusError: %v", err)
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	}
-
-	u, err := h.service.SetStatus(
+	u, err := h.service.SetStaffRank(
 		c.Context(),
 		uint64(userID),
-		status,
+		input.Status,
 	)
 	if err != nil {
 		slog.Debugf("SetUserStatusError: %v", err)
@@ -41,7 +34,7 @@ func (h *UserHandler) SetUserStatus(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(u)
 }
 
-func (h *UserHandler) SetDeveloper(c *fiber.Ctx) error {
+func (h *RanksHandler) SetDeveloperRank(c *fiber.Ctx) error {
 	userID, err := c.ParamsInt("id")
 	if err != nil {
 		slog.Debugf("SetDeveloperStatusError: %v", err)
@@ -49,7 +42,7 @@ func (h *UserHandler) SetDeveloper(c *fiber.Ctx) error {
 	}
 
 	var input struct {
-		Status int64 `json:"status"`
+		Status int `json:"status"`
 	}
 
 	if err := c.BodyParser(&input); err != nil {
@@ -57,16 +50,10 @@ func (h *UserHandler) SetDeveloper(c *fiber.Ctx) error {
 		return err
 	}
 
-	status, err := usermodel.ParseDeveloperStatus(input.Status)
-	if err != nil {
-		slog.Debugf("SetDeveloperStatusError: %v", err)
-		return err
-	}
-
-	_, err = h.service.SetDeveloper(
+	_, err = h.service.SetDeveloperRank(
 		c.Context(),
 		uint64(userID),
-		status,
+		input.Status,
 	)
 	if err != nil {
 		slog.Debugf("SetDeveloperStatusError: %v", err)

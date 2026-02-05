@@ -1,4 +1,4 @@
-package loggermodule
+package LoggerModule
 
 import (
 	loggerhandler "github.com/caseapia/goproject-flush/internal/handler/logger"
@@ -11,6 +11,7 @@ import (
 
 type LoggerModule struct {
 	Handler *loggerhandler.LoggerHandler
+	Service *loggerService.LoggerService
 }
 
 func NewLoggerModule(db *bun.DB) *LoggerModule {
@@ -20,7 +21,10 @@ func NewLoggerModule(db *bun.DB) *LoggerModule {
 	srv := loggerService.NewLoggerService(lRepo, uRepo)
 	h := loggerhandler.NewLoggerHandler(srv)
 
-	return &LoggerModule{Handler: h}
+	return &LoggerModule{
+		Handler: h,
+		Service: srv,
+	}
 }
 
 func (m *LoggerModule) RegisterRoutes(app fiber.Router) {

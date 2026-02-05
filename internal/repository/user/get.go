@@ -1,4 +1,4 @@
-package repository
+package UserRepository
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	models "github.com/caseapia/goproject-flush/internal/models/user"
 )
 
-// GetByID
 func (r *UserRepository) GetByID(ctx context.Context, id uint64) (*models.User, error) {
 	u := new(models.User)
 	err := r.db.NewSelect().
@@ -25,7 +24,6 @@ func (r *UserRepository) GetByID(ctx context.Context, id uint64) (*models.User, 
 	return u, nil
 }
 
-// GetAll
 func (r *UserRepository) GetAll(ctx context.Context) ([]models.User, error) {
 	var users []models.User
 	err := r.db.NewSelect().
@@ -34,7 +32,6 @@ func (r *UserRepository) GetAll(ctx context.Context) ([]models.User, error) {
 	return users, err
 }
 
-// GetByName
 func (r *UserRepository) GetByName(ctx context.Context, name string) (*models.User, error) {
 	u := new(models.User)
 	err := r.db.NewSelect().

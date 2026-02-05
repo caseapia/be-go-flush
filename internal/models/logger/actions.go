@@ -1,17 +1,17 @@
-package loggermodel
+package LoggerModel
 
 type LoggerAction string
 
 const (
 	// ! Admin actions
-	Ban          LoggerAction = "has banned"
-	Unban        LoggerAction = "has unbanned"
-	Create       LoggerAction = "has created"
-	SoftDelete   LoggerAction = "has soft-deleted"
-	HardDelete   LoggerAction = "has hard-deleted"
-	RestoreUser  LoggerAction = "has restored"
-	SetAdmin     LoggerAction = "has set admin perm"
-	SetDeveloper LoggerAction = "has set developer perm"
+	Ban              LoggerAction = "has banned"
+	Unban            LoggerAction = "has unbanned"
+	Create           LoggerAction = "has created"
+	SoftDelete       LoggerAction = "has soft-deleted"
+	HardDelete       LoggerAction = "has hard-deleted"
+	RestoreUser      LoggerAction = "has restored"
+	SetStaffRank     LoggerAction = "has set admin perm"
+	SetDeveloperRank LoggerAction = "has set developer perm"
 
 	// ! Searches
 	SearchByUsername LoggerAction = "searched by username"
