@@ -9,30 +9,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Получаем код из репо
+      # 1️⃣ Checkout
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2️⃣ Устанавливаем Go
+      # 2️⃣ Setup Go
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
 
-      # 3️⃣ Скачиваем зависимости
+      # 3️⃣ Download deps
       - name: Download deps
         run: go mod download
 
-      # 4️⃣ Запускаем тесты
+      # 4️⃣ Run tests
       - name: Run tests
         run: go test ./...
 
-      # 5️⃣ Сборка бинаря на GitHub
+      # 5️⃣ Build Linux binary
       - name: Build Linux binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app ./cmd
 
-      # 6️⃣ Загружаем бинарь на сервер
+      # 6️⃣ Upload binary to server
       - name: Upload binary to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -40,10 +40,10 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: app
-          target: /var/www/be-go-flush
+          target: /var/www/be-go-flush/app.new
           overwrite: true
 
-      # 7️⃣ Перезапуск сервиса
+      # 7️⃣ Move binary and restart service
       - name: Restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -51,29 +51,30 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /var/www/be-go-flush
-            chmod +x app
+            mv /var/www/be-go-flush/app.new /var/www/be-go-flush/app
+            chmod +x /var/www/be-go-flush/app
             sudo systemctl restart be-go-flush
 
-      # 8️⃣ Discord уведомление
+      # 8️⃣ Discord notification
       - name: Discord notify
         if: always()
         run: |
+          TIMESTAMP=$(date +'%Y-%m-%d %H:%M:%S')
           curl -H "Content-Type: application/json" \
-          -d '{
-            "username": "Deploy Bot",
-            "avatar_url": "https://i.imgur.com/4M34hi2.png",
-            "embeds": [{
-              "title": "🚀 Go Backend Deploy",
-              "url": "https://github.com/caseapia/be-go-flush/commit/${{ github.sha }}",
-              "color": 3066993,
-              "fields": [
-                { "name": "Branch", "value": "${{ github.ref_name }}", "inline": true },
-                { "name": "Commit", "value": "${{ github.sha }}", "inline": true },
-                { "name": "Actor", "value": "${{ github.actor }}", "inline": true },
-                { "name": "Status", "value": "${{ job.status }}", "inline": true },
-                { "name": "Time", "value": "$(date +'%Y-%m-%d %H:%M:%S')", "inline": true }
-              ],
-              "footer": { "text": "Auto-deploy via GitHub Actions" }
-            }]
-          }' ${{ secrets.DISCORD_WEBHOOK }}
+            -d "{
+              \"username\": \"Deploy Bot\",
+              \"avatar_url\": \"https://i.imgur.com/4M34hi2.png\",
+              \"embeds\": [{
+                \"title\": \"🚀 Go Backend Deploy\",
+                \"url\": \"https://github.com/caseapia/be-go-flush/commit/${{ github.sha }}\",
+                \"color\": 3066993,
+                \"fields\": [
+                  { \"name\": \"Branch\", \"value\": \"${{ github.ref_name }}\", \"inline\": true },
+                  { \"name\": \"Commit\", \"value\": \"${{ github.sha }}\", \"inline\": true },
+                  { \"name\": \"Actor\", \"value\": \"${{ github.actor }}\", \"inline\": true },
+                  { \"name\": \"Status\", \"value\": \"${{ job.status }}\", \"inline\": true },
+                  { \"name\": \"Time\", \"value\": \"$TIMESTAMP\", \"inline\": true }
+                ],
+                \"footer\": { \"text\": \"Auto-deploy via GitHub Actions\" }
+              }]
+            }" ${{ secrets.DISCORD_WEBHOOK }}
