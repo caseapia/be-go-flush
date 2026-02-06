@@ -1,61 +1,63 @@
-name: Deploy Go Backend
+name: Build & Deploy Go Backend
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
 
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout code
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Setup Go
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.21"
+          go-version: "1.22"
 
-      # Build backend
-      - name: Build backend
+      - name: Download deps
+        run: go mod download
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build Linux binary
         run: |
-          set -o pipefail
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o be-go-flush ./cmd
-          ls -lh be-go-flush
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app
 
-      # Copy binary to server
-      - name: Deploy backend
-        uses: appleboy/scp-action@v0.1.5
+      - name: Upload binary to server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "be-go-flush"
-          target: "${{ secrets.APP_PATH }}/be-go-flush"
+          source: app
+          target: /var/www/be-go-flush
+          overwrite: true
 
-      # Restart backend
-      - name: Restart backend
-        uses: appleboy/ssh-action@v0.1.7
+      - name: Restart service
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
           script: |
-            cd ${{ secrets.APP_PATH }}
-            pkill -f be-go-flush || true
-            nohup ./be-go-flush > app.log 2>&1 &
+            cd /var/www/be-go-flush
+            chmod +x app
+            sudo systemctl restart be-go-flush
 
-      # Discord notification
-      - name: Notify Discord
+      - name: Discord notify
+        if: always()
         run: |
-          STATUS=$([[ ${{ job.status }} == "success" ]] && echo "✅ Success" || echo "❌ Failed")
-          curl -H "Content-Type: application/json" -X POST -d '{
-            "content": "'"$STATUS"'",
-            "embeds": [{"title":"Go Backend Deploy","description":"Commit: $GITHUB_SHA\nActor: $GITHUB_ACTOR"}]
-          }' ${{ secrets.DISCORD_WEBHOOK }}
+          curl -H "Content-Type: application/json" \
+          -d '{
+            "username": "Deploy Bot",
+            "embeds": [{
+              "title": "🚀 Go Backend Deploy",
+              "description": "Статус: **${{ job.status }}**",
+              "color": 3066993
+            }]
+          }' \
+          https://ptb.discord.com/api/webhooks/1469429197197017089/a8kJUQnFkTaKGAW8DZbeQSkAlPvCZpbH4MKg5AZEwYRF2zOI3T-9P2tEKVjalhJ48mqR
