@@ -1,10 +1,13 @@
 package ranks
 
+import "github.com/uptrace/bun"
+
 type RankStructure struct {
-	ID    int64    `bun:"id,pk,autoincrement" json:"id"`
-	Name  string   `bun:"name" json:"name"`
-	Color string   `bun:"color" json:"color"`
-	Flags []string `bun:"flags" json:"flags"`
+	bun.BaseModel `bun:"table:ranks"`
+	ID            int64    `bun:"id,pk,autoincrement" json:"id"`
+	Name          string   `bun:"name" json:"name"`
+	Color         string   `bun:"color" json:"color"`
+	Flags         []string `bun:"flags" json:"flags"`
 }
 
 func (r *RankStructure) HasFlag(flag string) bool {
