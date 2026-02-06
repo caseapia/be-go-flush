@@ -1,4 +1,4 @@
-package LoggerRepository
+package logger
 
 import (
 	"context"

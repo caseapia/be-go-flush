@@ -1,4 +1,4 @@
-package UserErrorConstructor
+package userError
 
 import (
 	errormodel "github.com/caseapia/goproject-flush/internal/models/error"

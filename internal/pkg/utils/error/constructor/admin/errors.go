@@ -1,4 +1,4 @@
-package AdminErrorConstructor
+package adminError
 
 import (
 	errormodel "github.com/caseapia/goproject-flush/internal/models/error"
@@ -52,5 +52,12 @@ func CantDeleteManager() *pkgerror.AppError {
 	return &pkgerror.AppError{
 		Code:    fiber.StatusForbidden,
 		Message: errormodel.ErrDeletionOfManagerIsNotAllowed,
+	}
+}
+
+func RankAlreadyExists() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusForbidden,
+		Message: errormodel.ErrRankAlreadyExists,
 	}
 }

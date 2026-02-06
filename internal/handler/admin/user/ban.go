@@ -1,4 +1,4 @@
-package AdminUserHandler
+package adminUser
 
 import (
 	"strconv"
@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func (h *AdminUserHandler) BanUser(c *fiber.Ctx) error {
+func (h *Handler) BanUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
 	var input struct {
@@ -24,7 +24,7 @@ func (h *AdminUserHandler) BanUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-func (h *AdminUserHandler) UnbanUser(c *fiber.Ctx) error {
+func (h *Handler) UnbanUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
 	user, err := h.service.UnbanUser(c.UserContext(), uint64(0), uint64(id))

@@ -1,4 +1,4 @@
-package LoggerService
+package logger
 
 import (
 	"context"

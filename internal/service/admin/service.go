@@ -1,4 +1,4 @@
-package adminservice
+package admin
 
 import (
 	adminrepository "github.com/caseapia/goproject-flush/internal/repository/admin"

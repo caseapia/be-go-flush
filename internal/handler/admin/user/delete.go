@@ -1,4 +1,4 @@
-package AdminUserHandler
+package adminUser
 
 import (
 	"strconv"
@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func (h *AdminUserHandler) DeleteUser(c *fiber.Ctx) error {
+func (h *Handler) DeleteUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
 	IsDeleted, err := h.service.DeleteUser(c.UserContext(), uint64(id))
@@ -18,7 +18,7 @@ func (h *AdminUserHandler) DeleteUser(c *fiber.Ctx) error {
 	return c.JSON(IsDeleted)
 }
 
-func (h *AdminUserHandler) RestoreUser(c *fiber.Ctx) error {
+func (h *Handler) RestoreUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
 	IsRestored, err := h.service.RestoreUser(c.UserContext(), uint64(id))

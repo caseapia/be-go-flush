@@ -1,4 +1,4 @@
-package UserModel
+package user
 
 import (
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"

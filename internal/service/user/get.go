@@ -1,4 +1,4 @@
-package UserService
+package user
 
 import (
 	"context"
@@ -9,26 +9,26 @@ import (
 )
 
 func (s *UserService) GetUser(ctx context.Context, id uint64) (*models.User, error) {
-	user, err := s.repo.GetByID(ctx, id)
+	u, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if user == nil || user.IsDeleted {
+	if u == nil || u.IsDeleted {
 		return nil, UserError.UserNotFound()
 	}
 
 	_ = s.logger.Log(ctx, 0, &id, loggermodule.SearchByUserID)
 
-	return user, nil
+	return u, nil
 }
 
 func (s *UserService) GetUsersList(ctx context.Context) ([]models.User, error) {
-	users, err := s.repo.GetAll(ctx)
+	u, err := s.repo.GetAll(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	_ = s.logger.Log(ctx, 0, nil, loggermodule.SearchByAllUsers)
 
-	return users, nil
+	return u, nil
 }

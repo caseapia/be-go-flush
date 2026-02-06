@@ -1,4 +1,4 @@
-package ErrorModel
+package errors
 
 type ErrorMessage string
 
@@ -20,4 +20,5 @@ const (
 	ErrDeveloperRankCannotBeIssued          ErrorMessage = "developer rank cannot be issued by SetStaff function"
 	ErrStaffRankCannotBeIssued              ErrorMessage = "staff rank cannot be issued by SetDeveloper function"
 	ErrDeletionOfManagerIsNotAllowed        ErrorMessage = "deletion of manager account is not allowed"
+	ErrRankAlreadyExists                    ErrorMessage = "rank with this name already exists"
 )

@@ -1,4 +1,4 @@
-package LoggerService
+package logger
 
 import (
 	repository "github.com/caseapia/goproject-flush/internal/repository/logger"

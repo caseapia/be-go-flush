@@ -1,4 +1,4 @@
-package Config
+package config
 
 import (
 	AdminModule "github.com/caseapia/goproject-flush/internal/module/admin"

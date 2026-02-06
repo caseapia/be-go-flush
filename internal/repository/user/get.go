@@ -1,4 +1,4 @@
-package UserRepository
+package user
 
 import (
 	"context"

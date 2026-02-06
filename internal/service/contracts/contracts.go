@@ -1,4 +1,4 @@
-package Contracts
+package contracts
 
 import (
 	"context"
@@ -13,6 +13,6 @@ type UserRankSetter interface {
 }
 
 type RanksProvider interface {
-	GetRanksList(ctx context.Context) ([]ranksmodel.Rank, error)
-	GetByID(ctx context.Context, id int) (*ranksmodel.Rank, error)
+	GetRanksList(ctx context.Context) ([]ranksmodel.RankStructure, error)
+	GetByID(ctx context.Context, id int) (*ranksmodel.RankStructure, error)
 }

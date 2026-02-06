@@ -3,16 +3,15 @@ package main
 import (
 	"log"
 
-	Config "github.com/caseapia/goproject-flush/config"
-	adminuserhandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
+	"github.com/caseapia/goproject-flush/config"
+	adminUserHandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
 	"github.com/caseapia/goproject-flush/internal/middleware"
-	adminmodule "github.com/caseapia/goproject-flush/internal/module/admin"
-	loggermodule "github.com/caseapia/goproject-flush/internal/module/logger"
-	usermodule "github.com/caseapia/goproject-flush/internal/module/user"
-	AdminUserRepository "github.com/caseapia/goproject-flush/internal/repository/admin/user"
-	UserRepository "github.com/caseapia/goproject-flush/internal/repository/user"
-	adminuserservice "github.com/caseapia/goproject-flush/internal/service/admin/user"
-	Contracts "github.com/caseapia/goproject-flush/internal/service/contracts"
+	"github.com/caseapia/goproject-flush/internal/module/admin"
+	"github.com/caseapia/goproject-flush/internal/module/logger"
+	"github.com/caseapia/goproject-flush/internal/module/user"
+	adminUserRepoPkg "github.com/caseapia/goproject-flush/internal/repository/admin/user"
+	adminUserService "github.com/caseapia/goproject-flush/internal/service/admin/user"
+	"github.com/caseapia/goproject-flush/internal/service/contracts"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gookit/slog"
@@ -25,8 +24,8 @@ func main() {
 	})
 	slog.SetFormatter(slog.NewJSONFormatter())
 
-	Config.LoadEnv()
-	db := Config.Connect()
+	config.LoadEnv()
+	db := config.Connect()
 	if db == nil {
 		log.Fatal("Failed to connect to DB")
 	}
@@ -35,21 +34,22 @@ func main() {
 		ErrorHandler: middleware.AppErrorHandler,
 	})
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000",
-		AllowMethods: "GET,POST,PUT,DELETE,PATCH",
+		AllowOrigins: "http://localhost:3000,https://fe-go-flush.vercel.app",
+		AllowMethods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 
-	loggerM := loggermodule.NewLoggerModule(db)
+	loggerM := logger.NewLoggerModule(db)
 
-	var rankProvider Contracts.RanksProvider = nil
-	userM := usermodule.NewUserModule(db, loggerM.Service, rankProvider)
+	var rankProvider contracts.RanksProvider = nil
+	userM := user.NewUserModule(db, loggerM.Service, rankProvider)
 
-	adminM := adminmodule.NewAdminModule(db, (Contracts.UserRankSetter)(nil), nil)
+	adminM := admin.NewAdminModule(db, (contracts.UserRankSetter)(nil), nil)
 
-	userRepo := UserRepository.NewUserRepository(db)
-	adminUserRepo := AdminUserRepository.NewAdminUserRepository(db)
+	userRepo := config.NewUserRepository()
+	adminUserRepo := adminUserRepoPkg.NewAdminUserRepository(db)
 
-	adminUserSrv := adminuserservice.NewAdminUserService(
+	adminUserSrv := adminUserService.NewAdminUserService(
 		userRepo,
 		adminM.RanksService,
 		loggerM.Service,
@@ -58,12 +58,11 @@ func main() {
 
 	adminM.RanksService.SetUserRankSetter(adminUserSrv)
 
-	userHandler := adminuserhandler.NewAdminUserHandler(adminUserSrv)
+	userHandler := adminUserHandler.NewAdminUserHandler(adminUserSrv)
+	userM.Service.SetRanksService(adminM.RanksService)
 	adminM.UserHandler = userHandler
 
-	userM.Service.SetRanksService(adminM.RanksService)
-
-	Config.SetupRoutes(app, userM, loggerM, adminM)
+	config.SetupRoutes(app, userM, loggerM, adminM)
 
 	log.Fatal(app.Listen(":8080"))
 }

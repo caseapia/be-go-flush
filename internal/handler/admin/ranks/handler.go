@@ -1,13 +1,13 @@
-package AdminRanksHandler
+package adminRanks
 
-import ranksservice "github.com/caseapia/goproject-flush/internal/service/admin/ranks"
+import adminRanks "github.com/caseapia/goproject-flush/internal/service/admin/ranks"
 
-type RanksHandler struct {
-	service *ranksservice.RanksService
+type Handler struct {
+	service *adminRanks.RanksService
 }
 
-func NewRanksHandler(s *ranksservice.RanksService) *RanksHandler {
-	return &RanksHandler{
+func NewHandler(s *adminRanks.RanksService) *Handler {
+	return &Handler{
 		service: s,
 	}
 }

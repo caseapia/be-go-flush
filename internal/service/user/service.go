@@ -1,4 +1,4 @@
-package UserService
+package user
 
 import (
 	UserRepository "github.com/caseapia/goproject-flush/internal/repository/user"

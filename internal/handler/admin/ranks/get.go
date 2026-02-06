@@ -1,11 +1,11 @@
-package AdminRanksHandler
+package adminRanks
 
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
 
-func (r *RanksHandler) GetRanksList(c *fiber.Ctx) error {
+func (r *Handler) GetRanksList(c *fiber.Ctx) error {
 	ranks, err := r.service.GetRanksList(c.Context())
 	if err != nil {
 		slog.WithData(slog.M{

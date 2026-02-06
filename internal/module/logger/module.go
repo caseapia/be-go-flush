@@ -1,6 +1,7 @@
-package LoggerModule
+package logger
 
 import (
+	"github.com/caseapia/goproject-flush/internal/handler/logger"
 	loggerhandler "github.com/caseapia/goproject-flush/internal/handler/logger"
 	loggerRepo "github.com/caseapia/goproject-flush/internal/repository/logger"
 	userRepo "github.com/caseapia/goproject-flush/internal/repository/user"
@@ -10,7 +11,7 @@ import (
 )
 
 type LoggerModule struct {
-	Handler *loggerhandler.LoggerHandler
+	Handler *logger.Handler
 	Service *loggerService.LoggerService
 }
 
@@ -19,7 +20,7 @@ func NewLoggerModule(db *bun.DB) *LoggerModule {
 	uRepo := userRepo.NewUserRepository(db)
 
 	srv := loggerService.NewLoggerService(lRepo, uRepo)
-	h := loggerhandler.NewLoggerHandler(srv)
+	h := logger.NewHandler(srv)
 
 	return &LoggerModule{
 		Handler: h,

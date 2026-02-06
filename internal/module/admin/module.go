@@ -1,8 +1,8 @@
-package AdminModule
+package admin
 
 import (
-	AdminRanksHandler "github.com/caseapia/goproject-flush/internal/handler/admin/ranks"
-	AdminUserHandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
+	adminRanks "github.com/caseapia/goproject-flush/internal/handler/admin/ranks"
+	adminUser "github.com/caseapia/goproject-flush/internal/handler/admin/user"
 	AdminRanksRepository "github.com/caseapia/goproject-flush/internal/repository/admin/ranks"
 	AdminRanksService "github.com/caseapia/goproject-flush/internal/service/admin/ranks"
 	Contracts "github.com/caseapia/goproject-flush/internal/service/contracts"
@@ -11,15 +11,15 @@ import (
 )
 
 type AdminModule struct {
-	RanksHandler *AdminRanksHandler.RanksHandler
+	RanksHandler *adminRanks.Handler
 	RanksService *AdminRanksService.RanksService
-	UserHandler  *AdminUserHandler.AdminUserHandler
+	UserHandler  *adminUser.Handler
 }
 
-func NewAdminModule(db *bun.DB, userRankSetter Contracts.UserRankSetter, userHandler *AdminUserHandler.AdminUserHandler) *AdminModule {
+func NewAdminModule(db *bun.DB, userRankSetter Contracts.UserRankSetter, userHandler *adminUser.Handler) *AdminModule {
 	ranksRepo := AdminRanksRepository.NewRanksRepository(db)
 	ranksSrv := AdminRanksService.NewRanksService(ranksRepo, userRankSetter)
-	ranksHandler := AdminRanksHandler.NewRanksHandler(ranksSrv)
+	ranksHandler := adminRanks.NewHandler(ranksSrv)
 
 	return &AdminModule{
 		RanksHandler: ranksHandler,

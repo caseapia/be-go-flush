@@ -1,10 +1,11 @@
-package AdminUserService
+package adminUser
 
 import (
 	loggermodel "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 	"github.com/gofiber/fiber/v2"
+
 )
 
 func (s *AdminUserService) CreateUser(ctx *fiber.Ctx, adminID int, name string) (*models.User, error) {

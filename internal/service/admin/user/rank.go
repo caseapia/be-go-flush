@@ -1,4 +1,4 @@
-package AdminUserService
+package adminUser
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	loggermodel "github.com/caseapia/goproject-flush/internal/models/logger"
 	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
+
 )
 
 func (s *AdminUserService) SetStaffRank(ctx context.Context, userID uint64, rank int) (*usermodel.User, error) {

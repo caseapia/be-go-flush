@@ -1,4 +1,4 @@
-package usermodule
+package pkgUser
 
 import (
 	UserHandler "github.com/caseapia/goproject-flush/internal/handler/user"

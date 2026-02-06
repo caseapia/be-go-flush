@@ -1,4 +1,4 @@
-package LoggerModel
+package logger
 
 type LoggerAction string
 
@@ -13,6 +13,7 @@ const (
 	SetStaffRank         LoggerAction = "has set admin perm"
 	SetDeveloperRank     LoggerAction = "has set developer perm"
 	TriedToDeleteManager LoggerAction = "has tried to delete manager's account and action has stopped"
+	CreateRank           LoggerAction = "has created rank"
 
 	// ! Searches
 	SearchByUsername LoggerAction = "searched by username"

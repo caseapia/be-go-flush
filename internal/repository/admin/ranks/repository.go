@@ -1,4 +1,4 @@
-package AdminRanksRepository
+package adminRanks
 
 import (
 	"github.com/uptrace/bun"

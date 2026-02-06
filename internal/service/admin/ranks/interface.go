@@ -1,10 +1,9 @@
-package AdminRanksService
+package adminRanks
 
 import (
 	"context"
 
 	usermodel "github.com/caseapia/goproject-flush/internal/models/user"
-
 )
 
 type UserRankSetter interface {

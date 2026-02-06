@@ -1,4 +1,4 @@
-package Config
+package config
 
 import (
 	database "github.com/caseapia/goproject-flush/internal/db"
