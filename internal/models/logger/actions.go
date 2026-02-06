@@ -4,14 +4,15 @@ type LoggerAction string
 
 const (
 	// ! Admin actions
-	Ban              LoggerAction = "has banned"
-	Unban            LoggerAction = "has unbanned"
-	Create           LoggerAction = "has created"
-	SoftDelete       LoggerAction = "has soft-deleted"
-	HardDelete       LoggerAction = "has hard-deleted"
-	RestoreUser      LoggerAction = "has restored"
-	SetStaffRank     LoggerAction = "has set admin perm"
-	SetDeveloperRank LoggerAction = "has set developer perm"
+	Ban                  LoggerAction = "has banned"
+	Unban                LoggerAction = "has unbanned"
+	Create               LoggerAction = "has created"
+	SoftDelete           LoggerAction = "has soft-deleted"
+	HardDelete           LoggerAction = "has hard-deleted"
+	RestoreUser          LoggerAction = "has restored"
+	SetStaffRank         LoggerAction = "has set admin perm"
+	SetDeveloperRank     LoggerAction = "has set developer perm"
+	TriedToDeleteManager LoggerAction = "has tried to delete manager's account and action has stopped"
 
 	// ! Searches
 	SearchByUsername LoggerAction = "searched by username"

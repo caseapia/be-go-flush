@@ -5,6 +5,7 @@ import (
 
 	Config "github.com/caseapia/goproject-flush/config"
 	adminuserhandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
+	"github.com/caseapia/goproject-flush/internal/middleware"
 	adminmodule "github.com/caseapia/goproject-flush/internal/module/admin"
 	loggermodule "github.com/caseapia/goproject-flush/internal/module/logger"
 	usermodule "github.com/caseapia/goproject-flush/internal/module/user"
@@ -30,7 +31,9 @@ func main() {
 		log.Fatal("Failed to connect to DB")
 	}
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		ErrorHandler: middleware.AppErrorHandler,
+	})
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000",
 		AllowMethods: "GET,POST,PUT,DELETE,PATCH",

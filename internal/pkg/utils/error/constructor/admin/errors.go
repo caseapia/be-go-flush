@@ -33,3 +33,24 @@ func ManagerRankCannotBeChanged() *pkgerror.AppError {
 		Message: errormodel.ErrAdminManagerRankCannotBeChanged,
 	}
 }
+
+func CantIssueDeveloperRank() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusForbidden,
+		Message: errormodel.ErrDeveloperRankCannotBeIssued,
+	}
+}
+
+func CantIssueStaffRank() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusForbidden,
+		Message: errormodel.ErrStaffRankCannotBeIssued,
+	}
+}
+
+func CantDeleteManager() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusForbidden,
+		Message: errormodel.ErrDeletionOfManagerIsNotAllowed,
+	}
+}

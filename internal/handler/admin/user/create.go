@@ -13,7 +13,7 @@ func (h *AdminUserHandler) CreateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
 	}
 
-	user, err := h.service.CreateUser(c.UserContext(), 0, input.Name)
+	user, err := h.service.CreateUser(c, 0, input.Name)
 
 	if err != nil {
 		return err

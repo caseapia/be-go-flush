@@ -6,13 +6,22 @@ import (
 
 	loggermodel "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
+	AdminErrorConstructor "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/admin"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
 func (s *AdminUserService) DeleteUser(ctx context.Context, id uint64) (*models.User, error) {
 	u, err := s.repo.GetByID(ctx, id)
+	r, err := s.rankService.GetByID(ctx, u.StaffRank)
+
 	if err != nil && u == nil {
 		return nil, err
+	}
+
+	if r.HasFlag("MANAGER") {
+		_ = s.logger.Log(ctx, 0, &id, loggermodel.TriedToDeleteManager)
+
+		return nil, AdminErrorConstructor.CantDeleteManager()
 	}
 
 	if u.IsDeleted {
