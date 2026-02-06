@@ -9,24 +9,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Получаем код из репо
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2️⃣ Устанавливаем Go
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: "1.22"
 
+      # 3️⃣ Скачиваем зависимости
       - name: Download deps
         run: go mod download
 
+      # 4️⃣ Запускаем тесты
       - name: Run tests
         run: go test ./...
 
+      # 5️⃣ Сборка бинаря на GitHub
       - name: Build Linux binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app ./cmd
 
+      # 6️⃣ Загружаем бинарь на сервер
       - name: Upload binary to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -37,6 +43,7 @@ jobs:
           target: /var/www/be-go-flush
           overwrite: true
 
+      # 7️⃣ Перезапуск сервиса
       - name: Restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -48,16 +55,25 @@ jobs:
             chmod +x app
             sudo systemctl restart be-go-flush
 
+      # 8️⃣ Discord уведомление
       - name: Discord notify
         if: always()
         run: |
           curl -H "Content-Type: application/json" \
           -d '{
             "username": "Deploy Bot",
+            "avatar_url": "https://i.imgur.com/4M34hi2.png",
             "embeds": [{
               "title": "🚀 Go Backend Deploy",
-              "description": "**Branch:** ${{ github.ref_name }}\n**Commit:** ${{ github.sha }}\n**Status:** ${{ job.status }}\n**Actor:** ${{ github.actor }}",
-              "color": 3066993
+              "url": "https://github.com/caseapia/be-go-flush/commit/${{ github.sha }}",
+              "color": 3066993,
+              "fields": [
+                { "name": "Branch", "value": "${{ github.ref_name }}", "inline": true },
+                { "name": "Commit", "value": "${{ github.sha }}", "inline": true },
+                { "name": "Actor", "value": "${{ github.actor }}", "inline": true },
+                { "name": "Status", "value": "${{ job.status }}", "inline": true },
+                { "name": "Time", "value": "$(date +'%Y-%m-%d %H:%M:%S')", "inline": true }
+              ],
+              "footer": { "text": "Auto-deploy via GitHub Actions" }
             }]
-          }' \
-          https://ptb.discord.com/api/webhooks/1469429197197017089/a8kJUQnFkTaKGAW8DZbeQSkAlPvCZpbH4MKg5AZEwYRF2zOI3T-9P2tEKVjalhJ48mqR
+          }' ${{ secrets.DISCORD_WEBHOOK }}
