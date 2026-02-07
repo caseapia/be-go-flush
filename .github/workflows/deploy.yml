@@ -32,7 +32,7 @@ jobs:
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app.new ./cmd
 
-      # 6. Upload binary via SCP
+      # 6. Upload binary to server
       - name: Upload binary to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -43,7 +43,7 @@ jobs:
           target: /var/www/be-go-flush/app.new
           overwrite: true
 
-      # 7. Update .env and deploy
+      # 7. Deploy, update .env, swap binary, restart service
       - name: Deploy and restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -51,7 +51,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Создаем папку если не существует
             mkdir -p /var/www/be-go-flush
 
             # Обновляем .env при каждом деплое
@@ -64,13 +63,18 @@ jobs:
             echo "DB_NAME=${{ secrets.DB_NAME }}" >> "$ENV_FILE"
             chmod 600 "$ENV_FILE"
 
-            # Заменяем бинарь
+            # Удаляем старую папку/файл, если есть
+            if [ -e /var/www/be-go-flush/app ]; then
+              rm -rf /var/www/be-go-flush/app
+            fi
+
+            # Переименовываем бинарь
             mv /var/www/be-go-flush/app.new /var/www/be-go-flush/app
             chmod +x /var/www/be-go-flush/app
 
-            # Перезапуск systemd сервиса
-            sudo systemctl daemon-reload
-            sudo systemctl restart be-go-flush
+            # Перезапуск systemd с паролем из секретов
+            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl daemon-reload
+            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl restart be-go-flush
 
       # 8. Discord notification
       - name: Discord notification
