@@ -43,7 +43,19 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app.new ./cmd
 
       # ----------------------
-      # 6. Upload binary to server
+      # 6. Ensure folder exists on server
+      # ----------------------
+      - name: Ensure app folder exists
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mkdir -p /var/www/be-go-flush/app
+
+      # ----------------------
+      # 7. Upload binary to server
       # ----------------------
       - name: Upload binary to server
         uses: appleboy/scp-action@v0.1.7
@@ -52,70 +64,53 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: app.new
-          target: /var/www/be-go-flush/app/app.new
+          target: /var/www/be-go-flush/app/
           overwrite: true
 
       # ----------------------
-      # 7. Deploy: update .env, swap binary, restart service
+      # 8. Deploy, update .env, swap binary, restart service
       # ----------------------
       - name: Deploy and restart service
-        id: deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -e
-            LOG="/tmp/deploy_log.txt"
-            echo "" > $LOG
+            cd /var/www/be-go-flush/app
 
-            mkdir -p /var/www/be-go-flush/app
-
-            # ----------------------
-            # Обновляем .env
-            # ----------------------
-            echo "Updating .env..." | tee -a $LOG
-            ENV_FILE="/var/www/be-go-flush/app/.env"
-            {
-              echo "DB_USER=${{ secrets.DB_USER }}"
-              echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
-              echo "DB_HOST=${{ secrets.DB_HOST }}"
-              echo "DB_PORT=${{ secrets.DB_PORT }}"
-              echo "DB_NAME=${{ secrets.DB_NAME }}"
-            } > "$ENV_FILE" 2>> $LOG
+            # Обновляем .env каждый деплой
+            ENV_FILE=".env"
+            echo "Updating .env file..."
+            echo "DB_USER=${{ secrets.DB_USER }}" > "$ENV_FILE"
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}" >> "$ENV_FILE"
+            echo "DB_HOST=${{ secrets.DB_HOST }}" >> "$ENV_FILE"
+            echo "DB_PORT=${{ secrets.DB_PORT }}" >> "$ENV_FILE"
+            echo "DB_NAME=${{ secrets.DB_NAME }}" >> "$ENV_FILE"
             chmod 600 "$ENV_FILE"
 
-            # ----------------------
-            # Удаляем старый бинарь и заменяем
-            # ----------------------
-            echo "Replacing binary..." | tee -a $LOG
-            if [ -f /var/www/be-go-flush/app/app ]; then
-              rm -f /var/www/be-go-flush/app/app 2>> $LOG
+            # Удаляем старый бинарь, если есть
+            if [ -f app ]; then
+              rm -f app
             fi
-            mv /var/www/be-go-flush/app/app.new /var/www/be-go-flush/app/app 2>> $LOG
-            chmod +x /var/www/be-go-flush/app/app 2>> $LOG
 
-            # ----------------------
-            # Перезапуск systemd с паролем из секрета
-            # ----------------------
-            echo "Restarting service..." | tee -a $LOG
-            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl daemon-reload 2>> $LOG
-            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl restart be-go-flush 2>> $LOG
+            # Переименовываем новый бинарь
+            mv app.new app
+            chmod +x app
 
-            cat $LOG
-          # Сохраняем вывод как output
-          output: logs
+            # Перезапуск systemd с паролем
+            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl daemon-reload
+            echo "${{ secrets.SUDO_PASSWORD }}" | sudo -S systemctl restart be-go-flush
 
       # ----------------------
-      # 8. Discord notification с логами
+      # 9. Discord notification с логами ошибок
       # ----------------------
       - name: Discord notification
         if: always()
         run: |
-          LOGS="${{ steps.deploy.outputs.logs }}"
+          LOGS=$(tail -n 50 /var/www/be-go-flush/app/deploy.log 2>/dev/null || echo "")
+          ERRORS=$(echo "$LOGS" | grep -i -E "error|err|fail" || echo "No errors found")
           STATUS="${{ job.status }}"
-          ERRORS=$(echo "$LOGS" | grep -Ei "error|err|fail" || echo "No errors found")
           curl -H "Content-Type: application/json" \
                -d "{
                 \"username\": \"Deploy Bot\",
