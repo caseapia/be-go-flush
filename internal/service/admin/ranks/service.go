@@ -7,16 +7,20 @@ import (
 )
 
 type RanksService struct {
-	repo           *AdminRanksRepository.RanksRepository
+	ranksRepo      *AdminRanksRepository.RanksRepository
 	userRankSetter contracts.UserRankSetter
 	logger         *logger.LoggerService
 }
 
-func NewRanksService(repo *AdminRanksRepository.RanksRepository, userRankSetter contracts.UserRankSetter, logger *logger.LoggerService) *RanksService {
+func NewRanksService(
+	ranksRepo *AdminRanksRepository.RanksRepository,
+	userRankSetter contracts.UserRankSetter,
+	logger *logger.LoggerService,
+) *RanksService {
 	return &RanksService{
-		repo:           repo,
-		logger:         logger,
+		ranksRepo:      ranksRepo,
 		userRankSetter: userRankSetter,
+		logger:         logger,
 	}
 }
 

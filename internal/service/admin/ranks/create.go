@@ -13,7 +13,7 @@ import (
 )
 
 func (s *RanksService) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, rankColor string, rankFlags []string) (*ranks.RankStructure, error) {
-	existing, err := s.repo.GetByName(ctx.UserContext(), rankName)
+	existing, err := s.ranksRepo.GetByName(ctx.UserContext(), rankName)
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
@@ -29,7 +29,7 @@ func (s *RanksService) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName strin
 
 	rank := &ranks.RankStructure{Name: rankName, Color: rankColor, Flags: rankFlags}
 
-	if err := s.repo.Create(ctx.UserContext(), rank); err != nil {
+	if err := s.ranksRepo.Create(ctx.UserContext(), rank); err != nil {
 		return nil, err
 	}
 

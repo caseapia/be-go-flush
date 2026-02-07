@@ -5,7 +5,6 @@ import (
 	models "github.com/caseapia/goproject-flush/internal/models/user"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 func (s *AdminUserService) CreateUser(ctx *fiber.Ctx, adminID int, name string) (*models.User, error) {
@@ -22,7 +21,9 @@ func (s *AdminUserService) CreateUser(ctx *fiber.Ctx, adminID int, name string) 
 		return nil, UserError.UserInvalidUsername()
 	}
 
-	user := &models.User{Name: name}
+	user := &models.User{
+		Name: name,
+	}
 
 	if err := s.adminUser.Create(ctx.UserContext(), user); err != nil {
 		return nil, err

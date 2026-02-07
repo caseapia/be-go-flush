@@ -7,13 +7,13 @@ import (
 )
 
 func (s *RanksService) GetRanksList(ctx context.Context) ([]ranksmodel.RankStructure, error) {
-	return s.repo.GetAll(ctx)
+	return s.ranksRepo.GetAll(ctx)
 }
 
 func (s *RanksService) GetByID(ctx context.Context, id int) (*ranksmodel.RankStructure, error) {
-	return s.repo.GetByID(ctx, id)
+	return s.ranksRepo.GetByID(ctx, id)
 }
 
 func (s *RanksService) GetByName(ctx context.Context, rankName string) (*ranksmodel.RankStructure, error) {
-	return s.repo.GetByName(ctx, rankName)
+	return s.ranksRepo.GetByName(ctx, rankName)
 }

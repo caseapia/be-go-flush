@@ -3,7 +3,7 @@ package user
 import (
 	"time"
 
-	AdminError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/admin"
+	adminError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/admin"
 )
 
 type User struct {
@@ -12,8 +12,8 @@ type User struct {
 	IsBanned      bool       `bun:"is_banned" json:"isBanned,omitempty"`
 	BanReason     *string    `bun:"ban_reason" json:"banReason,omitempty"`
 	IsDeleted     bool       `bun:"is_deleted" json:"isDeleted,omitempty"`
-	StaffRank     int        `bun:"staff_rank" json:"staffRank"`
-	DeveloperRank int        `bun:"developer_rank" json:"developerRank"`
+	StaffRank     int        `bun:"staff_rank,default:1" json:"staffRank"`
+	DeveloperRank int        `bun:"developer_rank,default:1" json:"developerRank"`
 	CreatedAt     time.Time  `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
 	UpdatedAt     time.Time  `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
 	DeletedAt     *time.Time `bun:"deleted_at,nullzero" json:"-"`
@@ -25,8 +25,9 @@ func (User) TableName() string {
 
 func (u *User) SetStaffRank(rank int) (*User, error) {
 	if u.IsDeleted {
-		return nil, AdminError.CannotChangeStatusOfDeletedUser()
+		return nil, adminError.CannotChangeStatusOfDeletedUser()
 	}
+
 	u.StaffRank = rank
 	u.UpdatedAt = time.Now()
 	return u, nil
@@ -34,8 +35,9 @@ func (u *User) SetStaffRank(rank int) (*User, error) {
 
 func (u *User) SetDeveloperRank(rank int) (*User, error) {
 	if u.IsDeleted {
-		return nil, AdminError.CannotChangeStatusOfDeletedUser()
+		return nil, adminError.CannotChangeStatusOfDeletedUser()
 	}
+
 	u.DeveloperRank = rank
 	u.UpdatedAt = time.Now()
 	return u, nil
