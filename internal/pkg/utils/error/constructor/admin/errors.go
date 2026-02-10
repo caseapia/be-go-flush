@@ -61,3 +61,10 @@ func RankAlreadyExists() *pkgerror.AppError {
 		Message: errormodel.ErrRankAlreadyExists,
 	}
 }
+
+func RankNotExists() *pkgerror.AppError {
+	return &pkgerror.AppError{
+		Code:    fiber.StatusNotFound,
+		Message: errormodel.ErrReasonRequired,
+	}
+}

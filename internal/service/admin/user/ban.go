@@ -6,7 +6,6 @@ import (
 
 	loggermodule "github.com/caseapia/goproject-flush/internal/models/logger"
 	models "github.com/caseapia/goproject-flush/internal/models/user"
-	AdminError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/admin"
 	UserError "github.com/caseapia/goproject-flush/internal/pkg/utils/error/constructor/user"
 )
 
@@ -16,50 +15,33 @@ func (s AdminUserService) BanUser(
 	userID uint64,
 	reason string,
 ) (*models.User, error) {
-	user, err := s.repo.GetByID(ctx, userID)
+	u, err := s.repo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if user == nil {
+	if u == nil {
 		return nil, UserError.UserNotFound()
 	}
 
-	staffRankID := user.StaffRank
-	devRankID := user.DeveloperRank
-
-	adminRank, err := s.rankService.GetByID(ctx, staffRankID)
-	if err != nil {
-		return nil, err
-	}
-
-	if adminRank != nil && adminRank.HasFlag("MANAGER") {
-		return nil, AdminError.ManagerRankCannotBeChanged()
-	}
-
-	devRank, err := s.rankService.GetByID(ctx, devRankID)
-	if err != nil {
-		return nil, err
-	}
-
-	if devRank != nil && devRank.HasFlag("MANAGER") {
-		return nil, AdminError.ManagerRankCannotBeChanged()
-	}
-
-	if user.IsBanned {
+	if u.IsBanned {
 		return nil, UserError.UserBanned()
 	}
 
-	user.IsBanned = true
-	user.BanReason = &reason
-	user.UpdatedAt = time.Now()
+	if u.UserHasFlag("NONBANNABLE") {
+		return nil, UserError.UserInvalidStatus()
+	}
 
-	if err := s.repo.Update(ctx, user); err != nil {
+	u.IsBanned = true
+	u.BanReason = &reason
+	u.UpdatedAt = time.Now()
+
+	if err := s.repo.Update(ctx, u); err != nil {
 		return nil, err
 	}
 
 	_ = s.logger.Log(ctx, "punish", adminID, &userID, loggermodule.Ban, "Reason: "+reason)
 
-	return user, nil
+	return u, nil
 }
 
 func (s *AdminUserService) UnbanUser(

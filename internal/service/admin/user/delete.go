@@ -27,7 +27,7 @@ func (s *AdminUserService) DeleteUser(ctx context.Context, id uint64) (*models.U
 	if u.IsDeleted {
 		_ = s.logger.Log(ctx, "common", 0, &id, loggermodel.HardDelete)
 
-		if err := s.adminUser.Delete(ctx, u); err != nil {
+		if err := s.adminUser.HardDelete(ctx, id); err != nil {
 			return nil, err
 		}
 
@@ -36,6 +36,10 @@ func (s *AdminUserService) DeleteUser(ctx context.Context, id uint64) (*models.U
 
 	u.IsDeleted = true
 	u.UpdatedAt = time.Now()
+
+	if err := s.adminUser.SoftDelete(ctx, u); err != nil {
+		return nil, err
+	}
 
 	if err := s.repo.Update(ctx, u); err != nil {
 		return nil, err

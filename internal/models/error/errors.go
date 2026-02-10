@@ -21,4 +21,5 @@ const (
 	ErrStaffRankCannotBeIssued              ErrorMessage = "staff rank cannot be issued by SetDeveloper function"
 	ErrDeletionOfManagerIsNotAllowed        ErrorMessage = "deletion of manager account is not allowed"
 	ErrRankAlreadyExists                    ErrorMessage = "rank with this name already exists"
+	ErrRankNotExists                        ErrorMessage = "rank does not exists"
 )

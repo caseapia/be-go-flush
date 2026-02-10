@@ -1,6 +1,5 @@
 package logger
 
-type UserAction string
 type UserPunishment string
 type CommonAction string
 
@@ -19,11 +18,12 @@ const (
 	SearchByAllUsers CommonAction = "searched all users"
 	SearchLogs       CommonAction = "searched logs"
 
-	SetStaffRank     UserAction = "has set admin perm"
-	SetDeveloperRank UserAction = "has set developer perm"
-	RestoreUser      UserAction = "has restored"
-	Create           UserAction = "has created"
-	ChangeFlags      UserAction = "has changed flags"
+	SetStaffRank     CommonAction = "has set admin perm"
+	SetDeveloperRank CommonAction = "has set developer perm"
+	RestoreUser      CommonAction = "has restored"
+	Create           CommonAction = "has created"
+	ChangeFlags      CommonAction = "has changed flags"
+	DeleteRank       CommonAction = "has delete rank"
 
 	SoftDelete           UserPunishment = "has soft-deleted"
 	HardDelete           UserPunishment = "has hard-deleted"
