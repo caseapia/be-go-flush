@@ -1,21 +1,27 @@
 package auth
 
 import (
+	"strings"
 	"time"
 
+	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
+	"github.com/caseapia/goproject-flush/internal/service/invite"
+	"github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gookit/slog"
 )
 
 type Handler struct {
-	service *auth.Service
+	authService   *auth.Service
+	inviteService *invite.Service
 }
 
-func NewHandler(service *auth.Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(auth *auth.Service, invite *invite.Service) *Handler {
+	return &Handler{authService: auth, inviteService: invite}
 }
 
-func (h *Handler) Register(c *fiber.Ctx) error {
+func (h *Handler) Register(c *fiber.Ctx) error { // Fiber Handler должен возвращать error
 	var body struct {
 		Login      string `json:"login"`
 		Email      string `json:"email"`
@@ -24,21 +30,49 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 	}
 
 	if err := c.BodyParser(&body); err != nil {
-		return fiber.ErrBadRequest
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	err := h.service.Register(
+	invite, err := h.inviteService.GetInviteByID(c.UserContext(), body.InviteCode)
+	if err != nil || invite.Used {
+		return fiber.NewError(fiber.StatusBadRequest, "invite code is invalid or already used")
+	}
+
+	user, err := h.authService.Register(
 		c.Context(),
 		body.Login,
 		body.InviteCode,
 		body.Email,
 		body.Password,
 	)
+
 	if err != nil {
-		return fiber.ErrBadRequest
+		if mysqlErr, ok := err.(*mysql.MySQLError); ok {
+			if mysqlErr.Number == 1062 {
+				if strings.Contains(mysqlErr.Message, "users.name") {
+					return fiber.NewError(fiber.StatusConflict, "login already exists")
+				}
+				if strings.Contains(mysqlErr.Message, "users.email") {
+					return fiber.NewError(fiber.StatusConflict, "email already exists")
+				}
+				return fiber.NewError(fiber.StatusConflict, "duplicate entry")
+			}
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.SendStatus(fiber.StatusCreated)
+	err = h.inviteService.UseInvite(c.UserContext(), body.InviteCode, user.ID)
+	if err != nil {
+		slog.Error("Failed to mark invite as used", "error", err, "code", body.InviteCode)
+		return c.Status(fiber.StatusNotFound).SendString(err.Error())
+	}
+
+	slog.WithData(slog.M{
+		"login": user.Name,
+		"id":    user.ID,
+	}).Debug("User successfully registered")
+
+	return c.Status(fiber.StatusCreated).JSON(user)
 }
 
 func (h *Handler) Login(c *fiber.Ctx) error {
@@ -51,10 +85,14 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
 	}
 
-	access, refresh, err := h.service.Login(c.Context(), body.Login, body.Password, c.Get("User-Agent"), c.IP())
+	access, refresh, err := h.authService.Login(c.Context(), body.Login, body.Password, c.Get("User-Agent"), c.IP())
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
+
+	slog.WithData(slog.M{
+		"user": body.Login,
+	}).Debug("User successfully logged in")
 
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
@@ -69,4 +107,40 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		"accessToken":  access,
 		"refreshToken": refresh,
 	})
+}
+
+func (h *Handler) Logout(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	user, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	sessionIDVal := c.Locals("session_id")
+
+	sessionID, ok := sessionIDVal.(string)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "invalid session"}
+	}
+
+	status := h.authService.Logout(c.Context(), sessionID)
+
+	slog.WithData(slog.M{
+		"user": user.ID,
+	}).Debug("User logouted successfully")
+
+	return c.JSON(status)
+}
+
+func (h *Handler) RegisterRoutes(router fiber.Router) {
+	group := router.Group("/auth")
+
+	group.Post("/register", h.Register)
+	group.Post("/login", h.Login)
+}
+
+func (h *Handler) RegisterPrivateRoute(router fiber.Router) {
+	group := router.Group("/auth")
+
+	group.Delete("/logout", h.Logout)
 }

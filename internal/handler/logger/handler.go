@@ -5,6 +5,7 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/gofiber/fiber/v2"
+
 )
 
 type Handler struct {
@@ -36,4 +37,10 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(logs)
+}
+
+func (h *Handler) RegisterRoutes(router fiber.Router) {
+	group := router.Group("/admin/logs")
+
+	group.Get("/:type", h.SearchLogs)
 }

@@ -2,66 +2,60 @@ package app
 
 import (
 	"github.com/caseapia/goproject-flush/config"
-	"github.com/caseapia/goproject-flush/internal/db"
-	adminUserHandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
-	authHandler "github.com/caseapia/goproject-flush/internal/handler/user/auth"
-	"github.com/caseapia/goproject-flush/internal/middleware"
-	adminInvite "github.com/caseapia/goproject-flush/internal/service/admin/invite"
-	adminRanksService "github.com/caseapia/goproject-flush/internal/service/admin/ranks"
-	adminUserService "github.com/caseapia/goproject-flush/internal/service/admin/user"
-	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
+	database "github.com/caseapia/goproject-flush/internal/db"
+	"github.com/caseapia/goproject-flush/internal/handler/auth"
+	"github.com/caseapia/goproject-flush/internal/handler/invite"
+	"github.com/caseapia/goproject-flush/internal/handler/logger"
+	"github.com/caseapia/goproject-flush/internal/handler/ranks"
+	"github.com/caseapia/goproject-flush/internal/handler/user"
 	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
-	adminModule "github.com/caseapia/goproject-flush/pkg/module/admin"
-	loggerModule "github.com/caseapia/goproject-flush/pkg/module/logger"
-	userModule "github.com/caseapia/goproject-flush/pkg/module/user"
+	authService "github.com/caseapia/goproject-flush/internal/service/auth"
+	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
+	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
+	ranksService "github.com/caseapia/goproject-flush/internal/service/ranks"
+	userService "github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gookit/slog"
-
 )
 
 func NewApp() (*fiber.App, error) {
-	// Загружаем конфиг
 	config.LoadEnv()
+	setupLogger()
 
-	// Подключаем БД
-	dbs, err := db.NewDatabases()
+	dbs, err := database.NewDatabases()
 	if err != nil {
 		return nil, err
 	}
 
-	// Настройка логгера
-	slog.Configure(func(l *slog.SugaredLogger) {
-		if f, ok := l.Formatter.(*slog.TextFormatter); ok {
-			f.EnableColor = true
-		}
-	})
-	slog.SetFormatter(slog.NewJSONFormatter())
+	mainRepo := mysqlRepo.NewRepository(dbs.Main)
+	logsRepo := mysqlRepo.NewRepository(dbs.Logs)
 
-	// Универсальный репозиторий
-	repo := mysqlRepo.NewRepository(dbs.Main)
+	loggerSrv := loggerService.NewService(*logsRepo)
 
-	// Сервисы
-	loggerSrv := loggerService.NewLoggerService(repo)
-	userRankSetter := adminRanksService.NewUserRankSetter(repo, loggerSrv)
-	ranksSrv := adminRanksService.NewRanksService(repo, userRankSetter, loggerSrv)
-	adminUserSrv := adminUserService.NewAdminUserService(repo, ranksSrv, loggerSrv)
-	inviteSrv := adminInvite.NewAdminService(repo, ranksSrv)
-	authSrv := authHandler.NewService(repo, inviteSrv)
+	ranksSrv := ranksService.NewService(mainRepo, loggerSrv)
 
-	// Хэндлеры
-	authH := authHandler.NewHandler(authSrv)
-	adminUserH := adminUserHandler.NewAdminUserHandler(adminUserSrv)
+	userSrv := userService.NewService(mainRepo, loggerSrv)
 
-	// Модули
-	userM := userModule.NewUserModule(repo, loggerSrv, ranksSrv)
-	adminM := adminModule.NewAdminModule(repo, ranksSrv, adminUserH, loggerSrv, inviteSrv)
-	loggerM := loggerModule.NewLoggerModule(repo, loggerSrv)
+	inviteSrv := inviteService.NewService(mainRepo)
 
-	// Fiber app
-	app := fiber.New(fiber.Config{
-		ErrorHandler: middleware.AppErrorHandler,
-	})
+	authSrv := authService.NewService(*mainRepo)
+
+	handlers := struct {
+		auth   *auth.Handler
+		user   *user.Handler
+		invite *invite.Handler
+		logger *logger.Handler
+		ranks  *ranks.Handler
+	}{
+		auth:   auth.NewHandler(authSrv, inviteSrv),
+		user:   user.NewUserHandler(userSrv, ranksSrv),
+		invite: invite.NewHandler(inviteSrv),
+		logger: logger.NewHandler(loggerSrv),
+		ranks:  ranks.NewHandler(ranksSrv),
+	}
+
+	app := fiber.New()
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: "http://localhost:3000,https://fe-go-flush.vercel.app",
@@ -69,12 +63,33 @@ func NewApp() (*fiber.App, error) {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 
-	// Роуты
 	api := app.Group("/api")
-	userM.RegisterRoutes(api)
-	adminM.RegisterRoutes(api)
-	loggerM.RegisterRoutes(api)
-	authH.RegisterRoutes(api)
+
+	// ! Public routes
+	handlers.auth.RegisterRoutes(api)
+
+	app.Get("/ping", func(c *fiber.Ctx) error {
+		return c.SendString("pong")
+	})
+
+	// ! Private Routes
+	private := api.Group("")
+	private.Use(auth.AuthMiddleware(authSrv))
+
+	handlers.user.RegisterRoutes(private)
+	handlers.invite.RegisterRoutes(private)
+	handlers.logger.RegisterRoutes(private)
+	handlers.ranks.RegisterRoutes(private)
+	handlers.auth.RegisterPrivateRoute(private)
 
 	return app, nil
+}
+
+func setupLogger() {
+	slog.Configure(func(l *slog.SugaredLogger) {
+		if f, ok := l.Formatter.(*slog.TextFormatter); ok {
+			f.EnableColor = true
+		}
+	})
+	slog.SetFormatter(slog.NewJSONFormatter())
 }

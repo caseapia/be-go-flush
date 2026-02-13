@@ -10,6 +10,7 @@ import (
 )
 
 type InviteRepository interface {
+	SearchAllInvites(ctx context.Context) ([]models.InviteDTO, error)
 	CreateInvite(ctx context.Context, invite *models.Invite) error
 	DeleteInvite(ctx context.Context, inviteID uint64) error
 	SearchInviteByCode(ctx context.Context, code string) (*models.Invite, error)
@@ -22,6 +23,19 @@ type Service struct {
 
 func NewService(repo InviteRepository) *Service {
 	return &Service{repo: repo}
+}
+
+func (s *Service) GetInviteCodes(ctx context.Context) ([]models.InviteDTO, error) {
+	return s.repo.SearchAllInvites(ctx)
+}
+
+func (s *Service) GetInviteByID(ctx context.Context, inviteID string) (*models.Invite, error) {
+	inviteInfo, err := s.repo.SearchInviteByCode(ctx, inviteID)
+	if err != nil {
+		return nil, fiber.NewError(500, err.Error())
+	}
+
+	return inviteInfo, nil
 }
 
 func (s *Service) CreateInvite(ctx context.Context, createdBy uint64) (*models.Invite, error) {
@@ -70,6 +84,6 @@ func (s *Service) UseInvite(ctx context.Context, code string, userID uint64) err
 	return s.repo.MarkInviteAsUsed(ctx, invite.ID, userID)
 }
 
-func (s *Service) DeleteInvite(ctx context.Context, inviteID uint64) error {
+func (s *Service) DeleteInvite(ctx context.Context, adminID uint64, inviteID uint64) error {
 	return s.repo.DeleteInvite(ctx, inviteID)
 }

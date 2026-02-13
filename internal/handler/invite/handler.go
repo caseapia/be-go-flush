@@ -1,6 +1,8 @@
 package invite
 
 import (
+	"strconv"
+
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/invite"
 	"github.com/gofiber/fiber/v2"
@@ -14,6 +16,21 @@ func NewHandler(s *invite.Service) *Handler {
 	return &Handler{
 		service: s,
 	}
+}
+
+func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	_, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	invites, err := h.service.GetInviteCodes(c.UserContext())
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(invites)
 }
 
 func (h *Handler) CreateInvite(c *fiber.Ctx) error {
@@ -32,16 +49,26 @@ func (h *Handler) CreateInvite(c *fiber.Ctx) error {
 }
 
 func (h *Handler) DeleteInvite(c *fiber.Ctx) error {
+	id, _ := strconv.Atoi(c.Params("id"))
+
 	val := c.Locals("user")
-	user, ok := val.(*models.User)
+	sender, ok := val.(*models.User)
 	if !ok {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	err := h.service.DeleteInvite(c.Context(), user.ID)
+	err := h.service.DeleteInvite(c.Context(), sender.ID, uint64(id))
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(true)
+}
+
+func (h *Handler) RegisterRoutes(router fiber.Router) {
+	group := router.Group("/admin/invite")
+
+	group.Get("/list", h.GetInviteCodes)
+	group.Post("/create", h.CreateInvite)
+	group.Delete("/delete/:id", h.DeleteInvite)
 }

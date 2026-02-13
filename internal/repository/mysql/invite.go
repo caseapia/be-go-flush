@@ -7,6 +7,23 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+func (r *Repository) SearchAllInvites(ctx context.Context) ([]models.InviteDTO, error) {
+	var invites []models.InviteDTO
+
+	err := r.db.NewSelect().
+		TableExpr("invites AS inv").
+		Model(&invites).
+		ColumnExpr("inv.*").
+		ColumnExpr("c.name AS creator_name").
+		ColumnExpr("u.name AS user_name").
+		Join("LEFT JOIN users AS c ON c.id = inv.created_by").
+		Join("LEFT JOIN users AS u ON u.id = inv.used_by").
+		Order("inv.created_at DESC").
+		Scan(ctx)
+
+	return invites, err
+}
+
 func (r *Repository) CreateInvite(ctx context.Context, invite *models.Invite) error {
 	_, err := r.db.NewInsert().
 		Model(invite).

@@ -12,7 +12,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
-
 )
 
 type Service struct {
@@ -23,10 +22,12 @@ func NewService(userRepo mysql.Repository) *Service {
 	return &Service{repository: userRepo}
 }
 
-func (s *Service) Register(ctx context.Context, name, invite, email, password string) error {
+var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}
+
+func (s *Service) Register(ctx context.Context, name, invite, email, password string) (*models.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	user := &models.User{
@@ -37,17 +38,17 @@ func (s *Service) Register(ctx context.Context, name, invite, email, password st
 		IsVerified:   true,
 	}
 
-	return s.repository.Create(ctx, user)
+	return user, s.repository.Create(ctx, user)
 }
 
 func (s *Service) Login(ctx context.Context, login, password, userAgent, ip string) (string, string, error) {
-	user, err := s.repository.GetByEmail(ctx, login)
+	user, err := s.repository.SearchByLogin(ctx, login)
 	if err != nil {
-		return "", "", &fiber.Error{Code: 404, Message: "invalid credentials"}
+		return "", "", fiber.NewError(401, "invalid credentials")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", "", &fiber.Error{Code: 404, Message: "invalid credentials"}
+	if !hash.CheckPassword(user.Password, password) {
+		return "", "", fiber.NewError(401, "invalid credentials")
 	}
 
 	sessionID := uuid.NewString()
@@ -57,7 +58,6 @@ func (s *Service) Login(ctx context.Context, login, password, userAgent, ip stri
 	}
 
 	refreshHash := hash.HashToken(refreshToken)
-
 	session := &models.Session{
 		ID:          sessionID,
 		UserID:      user.ID,
@@ -114,4 +114,18 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (string, str
 
 func (s *Service) Logout(ctx context.Context, sessionID string) error {
 	return s.repository.RevokeSession(ctx, sessionID)
+}
+
+func (s *Service) ParseJWT(tokenString string) (*models.User, *utils.Claims, error) {
+	claims, err := utils.ParseAccessToken(tokenString)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	user, err := s.repository.SearchUserByID(context.Background(), claims.UserID)
+	if err != nil || user == nil || user.TokenVersion != claims.TokenVer {
+		return nil, nil, err
+	}
+
+	return user, claims, nil
 }

@@ -3,6 +3,7 @@ package ranks
 import (
 	"strings"
 
+	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
@@ -30,6 +31,12 @@ func (r *Handler) GetRanksList(c *fiber.Ctx) error {
 }
 
 func (r *Handler) CreateRank(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
 	var input struct {
 		Name  string   `json:"name"`
 		Color string   `json:"color"`
@@ -44,7 +51,7 @@ func (r *Handler) CreateRank(c *fiber.Ctx) error {
 		input.Flags[i] = strings.ToUpper(flag)
 	}
 
-	rank, err := r.service.CreateRank(c, 0, input.Name, input.Color, input.Flags)
+	rank, err := r.service.CreateRank(c, sender.ID, input.Name, input.Color, input.Flags)
 
 	if err != nil {
 		return &fiber.Error{Code: 400, Message: err.Error()}
@@ -54,15 +61,29 @@ func (r *Handler) CreateRank(c *fiber.Ctx) error {
 }
 
 func (r *Handler) DeleteRank(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
 	rankID, err := c.ParamsInt("id")
 	if err != nil {
 		return err
 	}
 
-	IsSuccess, err := r.service.DeleteRank(c, rankID)
+	IsSuccess, err := r.service.DeleteRank(c, sender.ID, rankID)
 	if err != nil {
 		return err
 	}
 
 	return c.JSON(IsSuccess)
+}
+
+func (h *Handler) RegisterRoutes(router fiber.Router) {
+	group := router.Group("/admin/ranks")
+
+	group.Get("/", h.GetRanksList)
+	group.Post("/create", h.CreateRank)
+	group.Delete("/delete/:id", h.DeleteRank)
 }

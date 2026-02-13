@@ -22,6 +22,9 @@ type Repository interface {
 	SoftDelete(ctx context.Context, u *models.User) error
 	HardDelete(ctx context.Context, id uint64) error
 	Restore(ctx context.Context, user *models.User) error
+	CreateBan(ctx context.Context, ban *models.BanModel) error
+	GetActiveBan(ctx context.Context, userID uint64) (*models.BanModel, error)
+	DeleteBan(ctx context.Context, userID uint64) error
 
 	SearchRankByID(ctx context.Context, id int) (*models.RankStructure, error)
 	SetStaffRank(ctx context.Context, userID uint64, rankID int) (*models.User, error)
@@ -41,63 +44,7 @@ func NewService(r Repository, l Logger) *Service {
 }
 
 func (s *Service) SearchUser(ctx context.Context, adminID uint64, id uint64) (*models.User, error) {
-	u, err := s.repo.SearchUserByID(ctx, id)
-
-	_ = s.logger.Log(ctx, models.CommonLogger, adminID, &id, models.SearchByUserID)
-
-	if err != nil {
-		return nil, err
-	}
-	if u == nil {
-		return nil, fiber.ErrNotFound
-	}
-
-	return u, nil
-}
-
-func (s *Service) GetUsersList(ctx context.Context) ([]models.User, error) {
-	u, err := s.repo.SearchAllUsers(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return u, nil
-}
-
-// ! Admin actions
-func (s Service) BanUser(ctx context.Context, adminID uint64, userID uint64, unbanDate int, reason string) (*models.User, error) {
-	u, err := s.repo.SearchUserByID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if u == nil {
-		return nil, fiber.ErrNotFound
-	}
-
-	if u.IsBanned {
-		return nil, fiber.ErrBadRequest
-	}
-
-	if u.UserHasFlag("NONBANNABLE") {
-		return nil, fiber.ErrForbidden
-	}
-
-	u.IsBanned = true
-	u.BanReason = &reason
-	u.UpdatedAt = time.Now()
-
-	if err := s.repo.UpdateUser(ctx, u); err != nil {
-		return nil, err
-	}
-
-	_ = s.logger.Log(ctx, models.PunishmentLogger, adminID, &userID, models.Ban, "Reason: "+reason)
-
-	return u, nil
-}
-
-func (s *Service) UnbanUser(ctx context.Context, adminID uint64, userID uint64) (*models.User, error) {
-	user, err := s.repo.SearchUserByID(ctx, userID)
-
+	user, err := s.repo.SearchUserByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -105,20 +52,95 @@ func (s *Service) UnbanUser(ctx context.Context, adminID uint64, userID uint64) 
 		return nil, fiber.ErrNotFound
 	}
 
-	if !user.IsBanned {
-		return nil, fiber.ErrBadRequest
+	ban, _ := s.repo.GetActiveBan(ctx, id)
+	user.ActiveBan = ban
+
+	if id != adminID {
+		_ = s.logger.Log(ctx, models.CommonLogger, adminID, &id, models.SearchByUserID)
 	}
 
-	user.IsBanned = false
-	user.BanReason = nil
-	user.UpdatedAt = time.Now()
+	return user, nil
+}
 
-	if err := s.repo.UpdateUser(ctx, user); err != nil {
+func (s *Service) GetUsersList(ctx context.Context) ([]models.User, error) {
+	users, err := s.repo.SearchAllUsers(ctx)
+	if err != nil {
 		return nil, err
+	}
+
+	for i := range users {
+		ban, _ := s.repo.GetActiveBan(ctx, users[i].ID)
+		users[i].ActiveBan = ban
+	}
+
+	return users, nil
+}
+
+func (s *Service) GetOwnAccount(ctx context.Context, id uint64) (*models.User, error) {
+	user, err := s.repo.SearchUserByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, &fiber.Error{Code: 401, Message: "not authorized to get their own info"}
+	}
+
+	ban, _ := s.repo.GetActiveBan(ctx, id)
+	user.ActiveBan = ban
+
+	return user, nil
+}
+
+// ! Admin actions
+func (s *Service) BanUser(ctx context.Context, adminID, userID uint64, unbanDate time.Time, reason string) (*models.User, error) {
+	user, err := s.repo.SearchUserByID(ctx, userID)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if user == nil || user.IsDeleted {
+		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+	if user.UserHasFlag("NONBANNABLE") {
+		return nil, fiber.NewError(fiber.StatusForbidden, "ban of this user is not allowed")
+	}
+
+	ban := &models.BanModel{
+		IssuedBy:       adminID,
+		IssuedTo:       userID,
+		Date:           time.Now(),
+		ExpirationDate: unbanDate,
+		Reason:         reason,
+	}
+
+	if err := s.repo.CreateBan(ctx, ban); err != nil {
+		return nil, err
+	}
+
+	_ = s.logger.Log(ctx, models.PunishmentLogger, adminID, &userID, models.Ban, "with reason: "+reason+" until: "+unbanDate.String())
+
+	user.ActiveBan = ban
+	return user, nil
+}
+
+func (s *Service) UnbanUser(ctx context.Context, adminID, userID uint64) (*models.User, error) {
+	user, err := s.repo.SearchUserByID(ctx, userID)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	if user == nil || user.IsDeleted {
+		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+
+	activeBan, _ := s.repo.GetActiveBan(ctx, userID)
+	if activeBan != nil {
+		if err := s.repo.DeleteBan(ctx, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	_ = s.logger.Log(ctx, models.PunishmentLogger, adminID, &userID, models.Unban)
 
+	user.ActiveBan = nil
 	return user, nil
 }
 

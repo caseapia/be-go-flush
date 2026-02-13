@@ -7,23 +7,25 @@ import (
 )
 
 func (r *Repository) Create(ctx context.Context, user *models.User) error {
-	_, err := r.db.NewInsert().Model(user).Exec(ctx)
+	_, err := r.db.NewInsert().
+		Model(user).
+		Exec(ctx)
 	return err
 }
 
-func (r *Repository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+func (r *Repository) SearchByLogin(ctx context.Context, login string) (*models.User, error) {
 	u := new(models.User)
 
 	err := r.db.NewSelect().
 		Model(u).
-		Where("email = ?", email).
+		Where("email = ? OR name = ?", login, login).
 		Limit(1).
 		Scan(ctx)
 
 	return u, err
 }
 
-func (r *Repository) GetByID(ctx context.Context, id uint64) (*models.User, error) {
+func (r *Repository) SearchByID(ctx context.Context, id uint64) (*models.User, error) {
 	u := new(models.User)
 
 	err := r.db.NewSelect().

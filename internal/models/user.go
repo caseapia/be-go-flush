@@ -9,13 +9,12 @@ import (
 
 type User struct {
 	bun.BaseModel `bun:"table:users"`
+
 	ID            uint64     `bun:"id,pk,autoincrement,unique" json:"id"`
 	Name          string     `bun:"name,unique,notnull" json:"name"`
 	Email         string     `bun:"email" json:"email"`
 	Password      string     `bun:"password" json:"-"`
-	IsBanned      bool       `bun:"is_banned" json:"isBanned,omitempty"`
 	IsVerified    bool       `bun:"is_verified" json:"isVerified"`
-	BanReason     *string    `bun:"ban_reason" json:"banReason,omitempty"`
 	IsDeleted     bool       `bun:"is_deleted" json:"isDeleted,omitempty"`
 	StaffRank     int        `bun:"staff_rank,default:1" json:"staffRank"`
 	DeveloperRank int        `bun:"developer_rank,default:1" json:"developerRank"`
@@ -24,6 +23,7 @@ type User struct {
 	UpdatedAt     time.Time  `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
 	DeletedAt     *time.Time `bun:"deleted_at,nullzero" json:"-"`
 	TokenVersion  int        `bun:"token_version" json:"-"`
+	ActiveBan     *BanModel  `bun:"-" json:"activeBan,omitempty"`
 }
 
 func (u *User) SetStaffRank(rank int) (*User, error) {

@@ -10,14 +10,6 @@ func CheckAccountStatus(u *models.User) (*models.User, error) {
 		return nil, &fiber.Error{Code: 404, Message: "user not exists"}
 	}
 
-	if u.IsBanned {
-		if u.BanReason != nil {
-			return u, &fiber.Error{Code: 403, Message: "user banned"}
-		}
-
-		return nil, &fiber.Error{Code: 404, Message: "user not exists"}
-	}
-
 	if !u.IsVerified {
 		return nil, &fiber.Error{Code: 404, Message: "user not verified"}
 	}
@@ -27,7 +19,7 @@ func CheckAccountStatus(u *models.User) (*models.User, error) {
 
 func CheckTokenVersion(userVersion int, tokenVersion int) error {
 	if userVersion != tokenVersion {
-		return ErrInvalidToken
+		return &fiber.Error{Code: 404, Message: "token invalid"}
 	}
 
 	return nil

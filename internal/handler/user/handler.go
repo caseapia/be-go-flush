@@ -2,8 +2,10 @@ package user
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
@@ -11,40 +13,67 @@ import (
 
 type Handler struct {
 	service *user.Service
+	rank    *ranks.Service
 }
 
-func NewUserHandler(s *user.Service) *Handler {
-	return &Handler{service: s}
-}
-
-func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
-
-	id, _ := strconv.Atoi(c.Params("id"))
-
-	u, err := h.service.SearchUser(c.UserContext(), admin.ID, uint64(id))
-	if err != nil {
-		return err
-	}
-
-	return c.JSON(u)
+func NewUserHandler(s *user.Service, r *ranks.Service) *Handler {
+	return &Handler{service: s, rank: r}
 }
 
 func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
 	users, err := h.service.GetUsersList(c.UserContext())
 	if err != nil {
 		slog.WithData(slog.M{
-			"e": err,
+			"e": err.Error(),
 		}).Debug("Error fetching users")
 
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
 	return c.JSON(users)
+}
+
+func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	u, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	user, err := h.service.GetOwnAccount(c.UserContext(), u.ID)
+	if err != nil {
+		slog.WithData(slog.M{
+			"e": err,
+		}).Debug("Error get user account")
+
+		return &fiber.Error{Code: 500, Message: err.Error()}
+	}
+
+	return c.JSON(user)
+}
+
+// ! Admin actions
+func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
+	id, _ := strconv.Atoi(c.Params("id"))
+
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	rank, err := h.rank.SearchRankByID(c, sender.StaffRank)
+
+	if !rank.HasFlag("ADMIN") && sender.ID != uint64(id) {
+		return &fiber.Error{Code: 401, Message: "no access"}
+	}
+
+	u, err := h.service.SearchUser(c.UserContext(), sender.ID, uint64(id))
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(u)
 }
 
 func (h *Handler) BanUser(c *fiber.Ctx) error {
@@ -57,13 +86,13 @@ func (h *Handler) BanUser(c *fiber.Ctx) error {
 	}
 
 	var Body struct {
-		unbanDate int    `json:"unbanDate"`
-		reason    string `json:"reason"`
+		UnbanDate time.Time `json:"unbanDate"`
+		Reason    string    `json:"reason"`
 	}
 
 	c.BodyParser(&Body)
 
-	ban, err := h.service.BanUser(c.UserContext(), admin.ID, uint64(id), Body.unbanDate, Body.reason)
+	ban, err := h.service.BanUser(c.UserContext(), admin.ID, uint64(id), Body.UnbanDate, Body.Reason)
 	if err != nil {
 		return err
 	}
@@ -96,14 +125,14 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 	}
 
 	var Body struct {
-		name string `json:"name"`
+		Name string `json:"name"`
 	}
 
 	if err := c.BodyParser(&Body); err != nil {
 		return &fiber.Error{Code: 400, Message: "invalid request"}
 	}
 
-	newUser, err := h.service.CreateUser(c, admin.ID, Body.name)
+	newUser, err := h.service.CreateUser(c, admin.ID, Body.Name)
 	if err != nil {
 		return err
 	}
@@ -201,4 +230,21 @@ func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(u)
+}
+
+func (h *Handler) RegisterRoutes(router fiber.Router) {
+	group := router.Group("/user")
+	groupAdmin := router.Group("/admin/user")
+
+	group.Get("/all", h.SearchAllUsers)
+	group.Get("/account", h.GetOwnAccount)
+	group.Get("/:id", h.SearchUserByID)
+
+	groupAdmin.Put("/create", h.CreateUser)
+	groupAdmin.Patch("/ban/:id", h.BanUser)
+	groupAdmin.Delete("/unban/:id", h.UnbanUser)
+	groupAdmin.Delete("/delete/:id", h.DeleteUser)
+	groupAdmin.Put("/restore/:id", h.RestoreUser)
+	groupAdmin.Patch("/rank/staff/:id", h.SetStaffRank)
+	groupAdmin.Patch("/rank/developer/:id", h.SetDeveloperRank)
 }

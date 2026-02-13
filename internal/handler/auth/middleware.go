@@ -1,32 +1,33 @@
 package auth
 
 import (
-	"context"
+	"strings"
 
-	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthMiddleware(authService *auth.Service, userRepo mysql.Repository) fiber.Handler {
+func AuthMiddleware(authSrv *auth.Service) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		token := c.Get("Authorization")
-		if token == "" {
-			return fiber.ErrUnauthorized
+		header := c.Get("Authorization")
+		if header == "" {
+			return fiber.NewError(fiber.StatusUnauthorized, "missing Authorization header")
 		}
 
-		userID, err := authService.ValidateAccessToken(token)
+		parts := strings.Split(header, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid Authorization header format")
+		}
+
+		token := parts[1]
+
+		user, claims, err := authSrv.ParseJWT(token)
 		if err != nil {
-			return fiber.ErrUnauthorized
-		}
-
-		user, err := userRepo.GetByID(context.Background(), userID)
-		if err != nil || user == nil {
-			return fiber.ErrUnauthorized
+			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 		}
 
 		c.Locals("user", user)
-
+		c.Locals("session_id", claims.SessionID)
 		return c.Next()
 	}
 }

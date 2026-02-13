@@ -42,12 +42,12 @@ func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, ra
 		return nil, err
 	}
 
-	r, err := s.repo.SearchRankByID(ctx.UserContext(), int(adminID))
+	r, err := s.repo.SearchRankByID(ctx.UserContext(), int(u.StaffRank))
 	if err != nil {
 		return nil, err
 	}
 
-	if !u.UserHasFlag("STAFFMANAGEMENT") || r.HasFlag("STAFFMANAGEMENT") {
+	if !r.HasFlag("STAFFMANAGEMENT") {
 		return nil, &fiber.Error{Code: 403, Message: "you're not allowed to use this function"}
 	}
 
@@ -76,7 +76,20 @@ func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, ra
 	return rank, nil
 }
 
-func (s *Service) DeleteRank(ctx *fiber.Ctx, id int) (bool, error) {
+func (s *Service) DeleteRank(ctx *fiber.Ctx, adminID uint64, id int) (bool, error) {
+	u, err := s.repo.SearchUserByID(ctx.UserContext(), adminID)
+	if err != nil {
+		return false, err
+	}
+	uRank, err := s.repo.SearchRankByID(ctx.UserContext(), u.StaffRank)
+	if err != nil {
+		return false, err
+	}
+
+	if !uRank.HasFlag("STAFFMANAGEMENT") {
+		return false, &fiber.Error{Code: 403, Message: "you're not allowed to use this function"}
+	}
+
 	r, err := s.repo.SearchRankByID(ctx.UserContext(), id)
 	if err != nil {
 		return false, err
@@ -103,4 +116,13 @@ func (s *Service) SearchAllRanks(ctx *fiber.Ctx) ([]models.RankStructure, error)
 	}
 
 	return ranks, nil
+}
+
+func (s *Service) SearchRankByID(ctx *fiber.Ctx, id int) (*models.RankStructure, error) {
+	rank, err := s.repo.SearchRankByID(ctx.UserContext(), id)
+	if err != nil {
+		return nil, err
+	}
+
+	return rank, nil
 }
