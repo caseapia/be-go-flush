@@ -1,0 +1,68 @@
+package ranks
+
+import (
+	"strings"
+
+	"github.com/caseapia/goproject-flush/internal/service/ranks"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gookit/slog"
+)
+
+type Handler struct {
+	service *ranks.Service
+}
+
+func NewHandler(s *ranks.Service) *Handler {
+	return &Handler{service: s}
+}
+
+func (r *Handler) GetRanksList(c *fiber.Ctx) error {
+	ranks, err := r.service.SearchAllRanks(c)
+	if err != nil {
+		slog.WithData(slog.M{
+			"error": err.Error(),
+		}).Debug("Error fetching ranks")
+
+		return &fiber.Error{Code: 500, Message: err.Error()}
+	}
+
+	return c.JSON(ranks)
+}
+
+func (r *Handler) CreateRank(c *fiber.Ctx) error {
+	var input struct {
+		Name  string   `json:"name"`
+		Color string   `json:"color"`
+		Flags []string `json:"flags"`
+	}
+
+	if err := c.BodyParser(&input); err != nil {
+		return &fiber.Error{Code: 400, Message: err.Error()}
+	}
+
+	for i, flag := range input.Flags {
+		input.Flags[i] = strings.ToUpper(flag)
+	}
+
+	rank, err := r.service.CreateRank(c, 0, input.Name, input.Color, input.Flags)
+
+	if err != nil {
+		return &fiber.Error{Code: 400, Message: err.Error()}
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(rank)
+}
+
+func (r *Handler) DeleteRank(c *fiber.Ctx) error {
+	rankID, err := c.ParamsInt("id")
+	if err != nil {
+		return err
+	}
+
+	IsSuccess, err := r.service.DeleteRank(c, rankID)
+	if err != nil {
+		return err
+	}
+
+	return c.JSON(IsSuccess)
+}

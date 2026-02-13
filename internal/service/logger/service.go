@@ -1,18 +1,89 @@
 package logger
 
 import (
-	repository "github.com/caseapia/goproject-flush/internal/repository/logger"
-	uRepository "github.com/caseapia/goproject-flush/internal/repository/user"
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 )
 
-type LoggerService struct {
-	repo  *repository.LoggerRepository
-	uRepo *uRepository.UserRepository
+type Service struct {
+	repo mysql.Repository
 }
 
-func NewLoggerService(r *repository.LoggerRepository, uR *uRepository.UserRepository) *LoggerService {
-	return &LoggerService{
-		repo:  r,
-		uRepo: uR,
+func NewService(r mysql.Repository) *Service {
+	return &Service{repo: r}
+}
+
+func (s *Service) GetCommonLogs(ctx context.Context) ([]models.CommonLog, error) {
+	return s.repo.GetCommonLogs(ctx)
+}
+
+func (s *Service) GetPunishmentLogs(ctx context.Context) ([]models.PunishmentLog, error) {
+	return s.repo.GetPunishmentLogs(ctx)
+}
+
+func (s *Service) Log(
+	ctx context.Context,
+	loggerType models.LoggerType,
+	adminID uint64,
+	userID *uint64,
+	action interface{},
+	additional ...string,
+) error {
+	var addInfo *string
+	if len(additional) > 0 {
+		addInfo = &additional[0]
+	}
+
+	var u *models.User
+
+	if userID != nil {
+		var err error
+		u, err = s.repo.SearchUserByID(ctx, *userID)
+		if err != nil {
+			u = nil
+		}
+	}
+
+	base := models.BaseLog{
+		AdminID:        adminID,
+		AdminName:      "",
+		UserID:         userID,
+		UserName:       nil,
+		AdditionalInfo: addInfo,
+		Date:           time.Now(),
+	}
+
+	if userID != nil && u != nil {
+		base.UserName = &u.Name
+	}
+
+	switch loggerType {
+	case models.PunishmentLogger:
+		act, ok := action.(models.Action)
+		if !ok {
+			return fmt.Errorf("expected models.Action for PunishmentLogger, got %T", action)
+		}
+		base.Action = act
+
+		return s.repo.SavePunishmentLog(ctx, &models.PunishmentLog{
+			BaseLog: base,
+		})
+
+	case models.CommonLogger:
+		act, ok := action.(models.Action)
+		if !ok {
+			return fmt.Errorf("expected models.Action for CommonLogger, got %T", action)
+		}
+		base.Action = act
+		return s.repo.SaveCommonLog(ctx, &models.CommonLog{
+			BaseLog: base,
+		})
+
+	default:
+		return fmt.Errorf("unknown logger type: %s", loggerType)
 	}
 }

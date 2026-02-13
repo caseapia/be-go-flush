@@ -1,0 +1,106 @@
+package ranks
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/gofiber/fiber/v2"
+)
+
+type Logger interface {
+	Log(ctx context.Context, loggerType models.LoggerType, adminID uint64, userID *uint64, action interface{}, additional ...string) error
+}
+
+type Repository interface {
+	SearchUserByID(ctx context.Context, id uint64) (*models.User, error)
+	SearchAllRanks(ctx context.Context) ([]models.RankStructure, error)
+	SearchRankByID(ctx context.Context, id int) (*models.RankStructure, error)
+	SearchRankByName(ctx context.Context, rankName string) (*models.RankStructure, error)
+	CreateRank(ctx context.Context, rank *models.RankStructure) error
+	DeleteRank(ctx context.Context, rank *models.RankStructure) error
+}
+
+type Service struct {
+	repo   Repository
+	logger Logger
+}
+
+func NewService(r Repository, l Logger) *Service {
+	return &Service{
+		repo:   r,
+		logger: l,
+	}
+}
+
+func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, rankColor string, rankFlags []string) (*models.RankStructure, error) {
+	u, err := s.repo.SearchUserByID(ctx.UserContext(), adminID)
+	if err != nil {
+		return nil, err
+	}
+
+	r, err := s.repo.SearchRankByID(ctx.UserContext(), int(adminID))
+	if err != nil {
+		return nil, err
+	}
+
+	if !u.UserHasFlag("STAFFMANAGEMENT") || r.HasFlag("STAFFMANAGEMENT") {
+		return nil, &fiber.Error{Code: 403, Message: "you're not allowed to use this function"}
+	}
+
+	existing, err := s.repo.SearchRankByName(ctx.UserContext(), rankName)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, &fiber.Error{Code: 409, Message: "rank with that name already exists"}
+	}
+
+	if rankName == "" || len(rankName) < 3 || len(rankName) > 30 {
+		return nil, &fiber.Error{Code: 400, Message: "invalid length of rank name"}
+	}
+
+	rank := &models.RankStructure{Name: rankName, Color: rankColor, Flags: rankFlags}
+
+	if err := s.repo.CreateRank(ctx.UserContext(), rank); err != nil {
+		return nil, err
+	}
+
+	addInfo := "with name: " + rankName + ", with color: " + rankColor + "with flags: " + strings.Join(rankFlags, ", ")
+
+	_ = s.logger.Log(ctx.UserContext(), models.CommonLogger, adminID, nil, models.CreateRank, addInfo)
+
+	return rank, nil
+}
+
+func (s *Service) DeleteRank(ctx *fiber.Ctx, id int) (bool, error) {
+	r, err := s.repo.SearchRankByID(ctx.UserContext(), id)
+	if err != nil {
+		return false, err
+	}
+	if r == nil {
+		return false, &fiber.Error{Code: 404, Message: "rank with that name not found"}
+	}
+
+	if err := s.repo.DeleteRank(ctx.UserContext(), r); err != nil {
+		return false, err
+	}
+
+	addInfo := "with ID: " + strconv.FormatInt(r.ID, 10) + ", with name: " + r.Name
+
+	_ = s.logger.Log(ctx.UserContext(), models.CommonLogger, 0, nil, models.DeleteRank, addInfo)
+
+	return true, nil
+}
+
+func (s *Service) SearchAllRanks(ctx *fiber.Ctx) ([]models.RankStructure, error) {
+	ranks, err := s.repo.SearchAllRanks(ctx.UserContext())
+	if err != nil {
+		return nil, err
+	}
+
+	return ranks, nil
+}

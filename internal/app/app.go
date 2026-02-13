@@ -2,70 +2,63 @@ package app
 
 import (
 	"github.com/caseapia/goproject-flush/config"
-	database "github.com/caseapia/goproject-flush/internal/db"
+	"github.com/caseapia/goproject-flush/internal/db"
 	adminUserHandler "github.com/caseapia/goproject-flush/internal/handler/admin/user"
+	authHandler "github.com/caseapia/goproject-flush/internal/handler/user/auth"
 	"github.com/caseapia/goproject-flush/internal/middleware"
-	adminModule "github.com/caseapia/goproject-flush/internal/module/admin"
-	loggerModule "github.com/caseapia/goproject-flush/internal/module/logger"
-	userModule "github.com/caseapia/goproject-flush/internal/module/user"
-	adminRanksRepo "github.com/caseapia/goproject-flush/internal/repository/admin/ranks"
-	adminUserRepo "github.com/caseapia/goproject-flush/internal/repository/admin/user"
-	loggerRepo "github.com/caseapia/goproject-flush/internal/repository/logger"
-	userRepo "github.com/caseapia/goproject-flush/internal/repository/user"
+	adminInvite "github.com/caseapia/goproject-flush/internal/service/admin/invite"
 	adminRanksService "github.com/caseapia/goproject-flush/internal/service/admin/ranks"
 	adminUserService "github.com/caseapia/goproject-flush/internal/service/admin/user"
 	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
+	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
+	adminModule "github.com/caseapia/goproject-flush/pkg/module/admin"
+	loggerModule "github.com/caseapia/goproject-flush/pkg/module/logger"
+	userModule "github.com/caseapia/goproject-flush/pkg/module/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gookit/slog"
+
 )
 
 func NewApp() (*fiber.App, error) {
+	// Загружаем конфиг
 	config.LoadEnv()
 
-	dbs, err := database.NewDatabases()
+	// Подключаем БД
+	dbs, err := db.NewDatabases()
 	if err != nil {
 		return nil, err
 	}
 
+	// Настройка логгера
 	slog.Configure(func(l *slog.SugaredLogger) {
-		f := l.Formatter.(*slog.TextFormatter)
-		f.EnableColor = true
+		if f, ok := l.Formatter.(*slog.TextFormatter); ok {
+			f.EnableColor = true
+		}
 	})
 	slog.SetFormatter(slog.NewJSONFormatter())
 
-	userRepo := userRepo.NewUserRepository(dbs.Main)
-	adminUserRepo := adminUserRepo.NewAdminUserRepository(dbs.Main)
-	ranksRepo := adminRanksRepo.NewRanksRepository(dbs.Main)
-	loggerRepo := loggerRepo.NewLoggerRepository(dbs.Logs)
+	// Универсальный репозиторий
+	repo := mysqlRepo.NewRepository(dbs.Main)
 
-	loggerSrv := loggerService.NewLoggerService(loggerRepo, userRepo)
+	// Сервисы
+	loggerSrv := loggerService.NewLoggerService(repo)
+	userRankSetter := adminRanksService.NewUserRankSetter(repo, loggerSrv)
+	ranksSrv := adminRanksService.NewRanksService(repo, userRankSetter, loggerSrv)
+	adminUserSrv := adminUserService.NewAdminUserService(repo, ranksSrv, loggerSrv)
+	inviteSrv := adminInvite.NewAdminService(repo, ranksSrv)
+	authSrv := authHandler.NewService(repo, inviteSrv)
 
-	userRankSetter := adminRanksService.NewUserRankSetter(
-		userRepo,
-		ranksRepo,
-		loggerSrv,
-	)
+	// Хэндлеры
+	authH := authHandler.NewHandler(authSrv)
+	adminUserH := adminUserHandler.NewAdminUserHandler(adminUserSrv)
 
-	ranksSrv := adminRanksService.NewRanksService(
-		ranksRepo,
-		userRankSetter,
-		loggerSrv,
-	)
+	// Модули
+	userM := userModule.NewUserModule(repo, loggerSrv, ranksSrv)
+	adminM := adminModule.NewAdminModule(repo, ranksSrv, adminUserH, loggerSrv, inviteSrv)
+	loggerM := loggerModule.NewLoggerModule(repo, loggerSrv)
 
-	adminUserSrv := adminUserService.NewAdminUserService(
-		userRepo,
-		ranksSrv,
-		loggerSrv,
-		adminUserRepo,
-	)
-
-	adminUserHandler := adminUserHandler.NewAdminUserHandler(adminUserSrv)
-
-	userM := userModule.NewUserModule(dbs.Main, loggerSrv, ranksSrv)
-	adminM := adminModule.NewAdminModule(dbs.Main, ranksSrv, adminUserHandler, loggerSrv)
-	loggerM := loggerModule.NewLoggerModule(dbs.Logs, userRepo)
-
+	// Fiber app
 	app := fiber.New(fiber.Config{
 		ErrorHandler: middleware.AppErrorHandler,
 	})
@@ -76,11 +69,12 @@ func NewApp() (*fiber.App, error) {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 
+	// Роуты
 	api := app.Group("/api")
-
 	userM.RegisterRoutes(api)
 	adminM.RegisterRoutes(api)
 	loggerM.RegisterRoutes(api)
+	authH.RegisterRoutes(api)
 
 	return app, nil
 }
