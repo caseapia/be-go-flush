@@ -33,6 +33,8 @@ const (
 	SoftDelete           Action = "has soft-deleted"
 	HardDelete           Action = "has hard-deleted"
 	TriedToDeleteManager Action = "has tried to delete manager's account and action has stopped"
+	CreateInvite         Action = "has created invite code"
+	DeleteInvite         Action = "has deleted invite code"
 )
 
 type BaseLog struct {

@@ -12,7 +12,7 @@ type User struct {
 
 	ID            uint64     `bun:"id,pk,autoincrement,unique" json:"id"`
 	Name          string     `bun:"name,unique,notnull" json:"name"`
-	Email         string     `bun:"email" json:"email"`
+	Email         string     `bun:"email" json:"-"`
 	Password      string     `bun:"password" json:"-"`
 	IsVerified    bool       `bun:"is_verified" json:"isVerified"`
 	IsDeleted     bool       `bun:"is_deleted" json:"isDeleted,omitempty"`
@@ -24,6 +24,9 @@ type User struct {
 	DeletedAt     *time.Time `bun:"deleted_at,nullzero" json:"-"`
 	TokenVersion  int        `bun:"token_version" json:"-"`
 	ActiveBan     *BanModel  `bun:"-" json:"activeBan,omitempty"`
+	LastLogin     *time.Time `bun:"last_login" json:"lastLogin"`
+	RegisterIP    string     `bun:"register_ip" json:"-"`
+	LastIP        string     `bun:"last_ip" json:"-"`
 }
 
 func (u *User) SetStaffRank(rank int) (*User, error) {
@@ -69,4 +72,12 @@ func (u *User) UserHasFlag(flag string) bool {
 	}
 
 	return false
+}
+
+func (u *User) GetPrivateData() map[string]interface{} {
+	return map[string]interface{}{
+		"email":      u.Email,
+		"registerIP": u.RegisterIP,
+		"lastIP":     u.LastIP,
+	}
 }

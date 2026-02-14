@@ -2,9 +2,11 @@ package invite
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/service/logger"
 	inviteutils "github.com/caseapia/goproject-flush/pkg/utils/invite"
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,19 +20,20 @@ type InviteRepository interface {
 }
 
 type Service struct {
-	repo InviteRepository
+	inviteRepo InviteRepository
+	logger     logger.Service
 }
 
-func NewService(repo InviteRepository) *Service {
-	return &Service{repo: repo}
+func NewService(inviteRepo InviteRepository, logger logger.Service) *Service {
+	return &Service{inviteRepo: inviteRepo, logger: logger}
 }
 
 func (s *Service) GetInviteCodes(ctx context.Context) ([]models.InviteDTO, error) {
-	return s.repo.SearchAllInvites(ctx)
+	return s.inviteRepo.SearchAllInvites(ctx)
 }
 
 func (s *Service) GetInviteByID(ctx context.Context, inviteID string) (*models.Invite, error) {
-	inviteInfo, err := s.repo.SearchInviteByCode(ctx, inviteID)
+	inviteInfo, err := s.inviteRepo.SearchInviteByCode(ctx, inviteID)
 	if err != nil {
 		return nil, fiber.NewError(500, err.Error())
 	}
@@ -51,15 +54,17 @@ func (s *Service) CreateInvite(ctx context.Context, createdBy uint64) (*models.I
 		CreatedAt: time.Now(),
 	}
 
-	if err := s.repo.CreateInvite(ctx, invite); err != nil {
+	if err := s.inviteRepo.CreateInvite(ctx, invite); err != nil {
 		return nil, err
 	}
+
+	_ = s.logger.Log(ctx, models.CommonLogger, createdBy, nil, models.CreateInvite, invite.Code)
 
 	return invite, nil
 }
 
 func (s *Service) ValidateInvite(ctx context.Context, code string) (*models.Invite, error) {
-	invite, err := s.repo.SearchInviteByCode(ctx, code)
+	invite, err := s.inviteRepo.SearchInviteByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +77,7 @@ func (s *Service) ValidateInvite(ctx context.Context, code string) (*models.Invi
 }
 
 func (s *Service) UseInvite(ctx context.Context, code string, userID uint64) error {
-	invite, err := s.repo.SearchInviteByCode(ctx, code)
+	invite, err := s.inviteRepo.SearchInviteByCode(ctx, code)
 	if err != nil {
 		return err
 	}
@@ -81,9 +86,11 @@ func (s *Service) UseInvite(ctx context.Context, code string, userID uint64) err
 		return &fiber.Error{Code: 403, Message: "invite already used"}
 	}
 
-	return s.repo.MarkInviteAsUsed(ctx, invite.ID, userID)
+	return s.inviteRepo.MarkInviteAsUsed(ctx, invite.ID, userID)
 }
 
 func (s *Service) DeleteInvite(ctx context.Context, adminID uint64, inviteID uint64) error {
-	return s.repo.DeleteInvite(ctx, inviteID)
+	_ = s.logger.Log(ctx, models.CommonLogger, adminID, nil, models.DeleteInvite, strconv.FormatUint(inviteID, 10))
+
+	return s.inviteRepo.DeleteInvite(ctx, inviteID)
 }

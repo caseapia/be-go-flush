@@ -8,6 +8,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/handler/logger"
 	"github.com/caseapia/goproject-flush/internal/handler/ranks"
 	"github.com/caseapia/goproject-flush/internal/handler/user"
+	"github.com/caseapia/goproject-flush/internal/middleware"
 	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
 	authService "github.com/caseapia/goproject-flush/internal/service/auth"
 	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
@@ -37,7 +38,7 @@ func NewApp() (*fiber.App, error) {
 
 	userSrv := userService.NewService(mainRepo, loggerSrv)
 
-	inviteSrv := inviteService.NewService(mainRepo)
+	inviteSrv := inviteService.NewService(mainRepo, *loggerSrv)
 
 	authSrv := authService.NewService(*mainRepo)
 
@@ -63,7 +64,7 @@ func NewApp() (*fiber.App, error) {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 	}))
 
-	api := app.Group("/api")
+	api := app.Group("/api", middleware.UpdateLastLogin(mainRepo))
 
 	// ! Public routes
 	handlers.auth.RegisterRoutes(api)
@@ -75,6 +76,7 @@ func NewApp() (*fiber.App, error) {
 	// ! Private Routes
 	private := api.Group("")
 	private.Use(auth.AuthMiddleware(authSrv))
+	private.Use(middleware.LoadRank(ranksSrv))
 
 	handlers.user.RegisterRoutes(private)
 	handlers.invite.RegisterRoutes(private)

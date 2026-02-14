@@ -24,7 +24,7 @@ func NewService(userRepo mysql.Repository) *Service {
 
 var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}
 
-func (s *Service) Register(ctx context.Context, name, invite, email, password string) (*models.User, error) {
+func (s *Service) Register(ctx context.Context, name, invite, email, password, ip string) (*models.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -36,6 +36,7 @@ func (s *Service) Register(ctx context.Context, name, invite, email, password st
 		Password:     string(hash),
 		TokenVersion: 1,
 		IsVerified:   true,
+		RegisterIP:   ip,
 	}
 
 	return user, s.repository.Create(ctx, user)

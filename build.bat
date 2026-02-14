@@ -17,7 +17,7 @@ echo Starting Go build for service %SERVICE_NAME%...
 cd /d "%PROJECT_PATH%"
 
 REM Основной билд
-go build -o "%BUILD_PATH%\%SERVICE_NAME%" ./cmd
+go build -o "%BUILD_PATH%\%SERVICE_NAME%" ./cmd/app
 if errorlevel 1 (
     echo Error during Go build process
     pause

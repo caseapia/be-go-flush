@@ -252,6 +252,7 @@ func (s *Service) SetStaffRank(ctx context.Context, userID uint64, rankID int) (
 		slog.WithData(slog.M{
 			"rankID": rankID,
 			"userID": userID,
+			"rank":   r,
 		}).Error("Rank has DEV flag")
 
 		return u, &fiber.Error{Code: 403, Message: "developer rank cannot be issued with this function"}

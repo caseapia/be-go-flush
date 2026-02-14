@@ -12,10 +12,6 @@ type RankStructure struct {
 
 func (r *RankStructure) HasFlag(flag string) bool {
 	for _, f := range r.Flags {
-		if f == "MANAGER" {
-			return true
-		}
-
 		if f == flag {
 			return true
 		}

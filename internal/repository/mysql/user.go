@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/gofiber/fiber/v2"
 )
 
 func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.User, error) {
@@ -174,5 +176,15 @@ func (r *Repository) DeleteBan(ctx context.Context, userID uint64) error {
 		Where("id = ?", userID).
 		Exec(ctx)
 
+	return err
+}
+
+func (r *Repository) UpdateLastLogin(ctx *fiber.Ctx, userID uint64) error {
+	_, err := r.db.NewUpdate().
+		Model((*models.User)(nil)).
+		Set("last_login = ?", time.Now()).
+		Set("last_ip = ?", ctx.IP()).
+		Where("id = ?", userID).
+		Exec(ctx.UserContext())
 	return err
 }

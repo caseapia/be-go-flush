@@ -21,7 +21,7 @@ func NewHandler(auth *auth.Service, invite *invite.Service) *Handler {
 	return &Handler{authService: auth, inviteService: invite}
 }
 
-func (h *Handler) Register(c *fiber.Ctx) error { // Fiber Handler должен возвращать error
+func (h *Handler) Register(c *fiber.Ctx) error {
 	var body struct {
 		Login      string `json:"login"`
 		Email      string `json:"email"`
@@ -44,6 +44,7 @@ func (h *Handler) Register(c *fiber.Ctx) error { // Fiber Handler должен �
 		body.InviteCode,
 		body.Email,
 		body.Password,
+		c.IP(),
 	)
 
 	if err != nil {

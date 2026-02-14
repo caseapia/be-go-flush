@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/service/user"
@@ -74,6 +75,26 @@ func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(u)
+}
+
+func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
+	userID, err := strconv.ParseUint(c.Params("id"), 10, 64)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid user ID")
+	}
+
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	user, err := h.service.SearchUser(c.Context(), sender.ID, userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+
+	return c.JSON(user.GetPrivateData())
 }
 
 func (h *Handler) BanUser(c *fiber.Ctx) error {
@@ -240,11 +261,12 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group.Get("/account", h.GetOwnAccount)
 	group.Get("/:id", h.SearchUserByID)
 
-	groupAdmin.Put("/create", h.CreateUser)
-	groupAdmin.Patch("/ban/:id", h.BanUser)
-	groupAdmin.Delete("/unban/:id", h.UnbanUser)
-	groupAdmin.Delete("/delete/:id", h.DeleteUser)
-	groupAdmin.Put("/restore/:id", h.RestoreUser)
-	groupAdmin.Patch("/rank/staff/:id", h.SetStaffRank)
-	groupAdmin.Patch("/rank/developer/:id", h.SetDeveloperRank)
+	groupAdmin.Put("/create", middleware.RequireRankFlag("SENIOR"), h.CreateUser)
+	groupAdmin.Patch("/ban/:id", middleware.RequireRankFlag("ADMIN"), h.BanUser)
+	groupAdmin.Delete("/unban/:id", middleware.RequireRankFlag("ADMIN"), h.UnbanUser)
+	groupAdmin.Delete("/delete/:id", middleware.RequireRankFlag("SENIOR"), h.DeleteUser)
+	groupAdmin.Put("/restore/:id", middleware.RequireRankFlag("SENIOR"), h.RestoreUser)
+	groupAdmin.Patch("/rank/staff/:id", middleware.RequireRankFlag("STAFFMANAGEMENT"), h.SetStaffRank)
+	groupAdmin.Patch("/rank/developer/:id", middleware.RequireRankFlag("STAFFMANAGEMENT"), h.SetDeveloperRank)
+	groupAdmin.Get("/:id", middleware.RequireRankFlag("ADMIN"), h.GetUserPrivate)
 }
