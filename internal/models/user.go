@@ -5,11 +5,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/uptrace/bun"
-
 )
 
 type User struct {
-	bun.BaseModel `bun:"table:flushproject.users"`
+	bun.BaseModel `bun:"table:users"`
 
 	// Basic
 	ID        uint64     `bun:"id,pk,autoincrement,unique" json:"id"`
@@ -25,10 +24,10 @@ type User struct {
 	Flags         *[]string `bun:"staff_flags" json:"staffFlags"`
 
 	// Restrictions
-	ActiveBanID *uint64      `bun:"active_ban" json:"-"`
-	ActiveBan   *BanModelDTO `bun:"rel:has-one,join:active_ban=id" json:"activeBan"`
-	IsDeleted   bool         `bun:"is_deleted" json:"isDeleted,omitempty"`
-	IsVerified  bool         `bun:"is_verified" json:"isVerified"`
+	ActiveBanID *uint64   `bun:"active_ban" json:"-"`
+	ActiveBan   *BanModel `bun:"rel:belongs-to,join:active_ban=id" json:"activeBan,omitempty"`
+	IsDeleted   bool      `bun:"is_deleted" json:"isDeleted,omitempty"`
+	IsVerified  bool      `bun:"is_verified" json:"isVerified"`
 
 	// Auth
 	TokenVersion int `bun:"token_version" json:"-"`

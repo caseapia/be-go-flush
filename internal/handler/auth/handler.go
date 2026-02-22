@@ -116,7 +116,7 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "invalid session"}
 	}
 
-	status := h.authService.Logout(c.Context(), sessionID)
+	status := h.authService.Logout(c.Context(), user, sessionID)
 
 	slog.WithData(slog.M{
 		"user": user.ID,

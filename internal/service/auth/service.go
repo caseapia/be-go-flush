@@ -50,6 +50,8 @@ func (s *Service) Register(ctx context.Context, name, invite, email, password, i
 		return nil, err
 	}
 
+	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserRegister, fmt.Sprintf("Email: %s | IP: %s", user.Email, ip))
+
 	return newUser, nil
 }
 
@@ -84,7 +86,7 @@ func (s *Service) Login(ctx context.Context, login, password, userAgent, ip stri
 		return "", "", err
 	}
 
-	s.notifier.SendNotification(ctx, user.ID, models.Success, "You have new session", fmt.Sprintf("You have new login on your account from: %s. If it's not you, send this information to the admins immediately", ip), nil)
+	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserLogin, fmt.Sprintf("UserAgent: %s | IP: %s", session.UserAgent, session.IPLast))
 
 	accessToken, err := utils.GenerateAccessToken(user.ID, sessionID, user.TokenVersion)
 	if err != nil {
@@ -126,7 +128,9 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, useragent, ip strin
 	return accessToken, newRefreshToken, nil
 }
 
-func (s *Service) Logout(ctx context.Context, sessionID string) error {
+func (s *Service) Logout(ctx context.Context, user *models.User, sessionID string) error {
+	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserLogout, fmt.Sprintf("IP: %s", user.LastIP))
+
 	return s.repository.RevokeSession(ctx, sessionID)
 }
 

@@ -5,7 +5,6 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 func (r *Repository) SearchAllInvites(ctx context.Context) ([]models.Invite, error) {
@@ -18,6 +17,10 @@ func (r *Repository) SearchAllInvites(ctx context.Context) ([]models.Invite, err
 		Order("created_at DESC").
 		Limit(COLUMNS_LIMIT).
 		Scan(ctx)
+
+	if invites == nil {
+		invites = make([]models.Invite, 0)
+	}
 
 	return invites, err
 }

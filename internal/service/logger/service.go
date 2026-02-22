@@ -17,16 +17,20 @@ func NewService(r mysql.Repository) *Service {
 	return &Service{repo: r}
 }
 
-func (s *Service) GetCommonLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.CommonLog, int, error) {
+func (s *Service) GetCommonStaffLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.CommonLog, int, error) {
 	return s.repo.GetCommonLogs(ctx, startDate, endDate, keywords)
 }
 
-func (s *Service) GetPunishmentLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.PunishmentLog, int, error) {
+func (s *Service) GetPunishmentStaffLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.PunishmentLog, int, error) {
 	return s.repo.GetPunishmentLogs(ctx, startDate, endDate, keywords)
 }
 
-func (s *Service) GetTicketsLog(ctx context.Context, startDate, endDate, keywords string) ([]models.TicketsLog, int, error) {
+func (s *Service) GetTicketsAdminLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.TicketsLog, int, error) {
 	return s.repo.GetTicketsLog(ctx, startDate, endDate, keywords)
+}
+
+func (s *Service) GetAuthAdminLogs(ctx context.Context, startDate, endDate, keywords string) ([]models.AuthLog, int, error) {
+	return s.repo.GetAuthLogs(ctx, startDate, endDate, keywords)
 }
 
 func (s *Service) Log(
@@ -56,24 +60,30 @@ func (s *Service) Log(
 
 	switch loggerType {
 
-	case models.PunishmentLogger:
-		s.repo.SavePunishmentLog(ctx, &models.PunishmentLog{
+	case models.StaffPunishmentLogger:
+		s.repo.SaveLog(ctx, &models.PunishmentLog{
 			BaseLog: base,
 			AdminID: *adminID,
 			UserID:  userID,
 		})
 
-	case models.CommonLogger:
-		s.repo.SaveCommonLog(ctx, &models.CommonLog{
+	case models.StaffCommonLogger:
+		s.repo.SaveLog(ctx, &models.CommonLog{
 			BaseLog: base,
 			AdminID: *adminID,
 			UserID:  userID,
 		})
 
-	case models.TicketLogger:
-		s.repo.SaveTicketsLog(ctx, &models.TicketsLog{
+	case models.AdminTicketLogger:
+		s.repo.SaveLog(ctx, &models.TicketsLog{
 			BaseLog: base,
 			AdminID: *adminID,
+			UserID:  userID,
+		})
+
+	case models.AdminAuthLogger:
+		s.repo.SaveLog(ctx, &models.AuthLog{
+			BaseLog: base,
 			UserID:  userID,
 		})
 

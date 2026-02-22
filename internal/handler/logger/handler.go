@@ -22,6 +22,12 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 	var limit int
 	var err error
 
+	uVal := c.Locals("user")
+	_, ok := uVal.(*models.User)
+	if !ok {
+		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+	}
+
 	var input models.LogPopulate
 
 	if err := c.BodyParser(&input); err != nil {
@@ -34,12 +40,14 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 	}
 
 	switch input.Type {
-	case "common":
-		logs, limit, err = l.service.GetCommonLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
-	case "punish":
-		logs, limit, err = l.service.GetPunishmentLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
-	case "tickets":
-		logs, limit, err = l.service.GetTicketsLog(c.UserContext(), input.StartDate, input.EndDate, keywords)
+	case "staffCommon":
+		logs, limit, err = l.service.GetCommonStaffLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
+	case "staffPunish":
+		logs, limit, err = l.service.GetPunishmentStaffLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
+	case "adminTickets":
+		logs, limit, err = l.service.GetTicketsAdminLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
+	case "adminAuth":
+		logs, limit, err = l.service.GetAuthAdminLogs(c.UserContext(), input.StartDate, input.EndDate, keywords)
 	default:
 		return fiber.NewError(fiber.StatusNotFound, "invalid log type")
 	}
@@ -61,7 +69,9 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 }
 
 func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/admin/logs")
+	adminGroup := router.Group("/admin/logs")
+	staffGroup := router.Group("/admin/logs/staff")
 
-	group.Post("/populate", middleware.RequireFlag("ADMIN"), h.SearchLogs)
+	adminGroup.Post("/populate", middleware.RequireFlag("ADMIN"), h.SearchLogs)
+	staffGroup.Post("/populate", middleware.RequireFlag("STAFFMANAGEMENT"), h.SearchLogs)
 }

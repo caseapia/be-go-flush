@@ -180,13 +180,40 @@ func (s *Service) PopulateTicketMessages(ctx context.Context, ticketID uint64, u
 }
 
 func (s *Service) TicketAssignment(ctx context.Context, ticketID uint64, user *models.User) (*models.Ticket, error) {
-	ticket, err := s.repo.TicketAssignment(ctx, ticketID, user.ID)
+	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, err
 	}
 
-	s.notify.SendNotification(ctx, ticket.Author.ID, models.Success, "Your ticket has been updated", fmt.Sprintf("You have a new staff member, assigned for your ticket #%v", ticket.ID), &user.ID)
-	s.logger.Log(ctx, models.TicketLogger, &user.ID, &ticket.Author.ID, models.AssignedToTicket, fmt.Sprintf("ID: %v | Title: %v", ticketID, ticket.Title))
+	isStaff := user.UserHasFlag("STAFF")
+	rankIsStaff := rank.HasFlag("STAFF")
+
+	if !(isStaff || rankIsStaff) {
+		return nil, fiber.NewError(fiber.StatusForbidden, "not allowed to use this function")
+	}
+
+	ticket, ticketErr := s.repo.PopulateTicket(ctx, ticketID)
+	if ticketErr != nil {
+		return nil, ticketErr
+	}
+
+	if ticket.HandledBy != nil {
+		unassignmentErr := s.repo.TicketUnassignment(ctx, ticketID)
+		if unassignmentErr != nil {
+			return nil, err
+		}
+
+		s.notify.SendNotification(ctx, ticket.AuthorID, models.Information, "Your ticket has been updated", fmt.Sprintf("Staff member has unassign himself from your ticket #%v", ticket.ID), &user.ID)
+		s.logger.Log(ctx, models.AdminTicketLogger, &user.ID, &ticket.Author.ID, models.AssignedToTicket, fmt.Sprintf("ID: %v | Title: %v", ticketID, ticket.Title))
+	} else {
+		assignmentErr := s.repo.TicketAssignment(ctx, ticketID, user.ID)
+		if assignmentErr != nil {
+			return nil, assignmentErr
+		}
+
+		s.notify.SendNotification(ctx, ticket.Author.ID, models.Success, "Your ticket has been updated", fmt.Sprintf("You have a new staff member, assigned for your ticket #%v", ticket.ID), &user.ID)
+		s.logger.Log(ctx, models.AdminTicketLogger, &user.ID, &ticket.Author.ID, models.UnassignFromTicket, fmt.Sprintf("ID: %v | Title: %v", ticketID, ticket.Title))
+	}
 
 	return ticket, err
 }
@@ -214,15 +241,45 @@ func (s *Service) CloseTicket(ctx context.Context, ticketID uint64, user models.
 		return nil, fiber.NewError(fiber.StatusBadRequest, "ticket already closed")
 	}
 
-	ticket, err = s.repo.CloseTicket(ctx, ticket.ID)
+	err = s.repo.CloseTicket(ctx, ticket.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !isAuthor {
 		s.notify.SendNotification(ctx, ticket.Author.ID, models.Success, "Your ticket has been updated", fmt.Sprintf("Your ticket #%v was closed by an admin", ticket.ID), &user.ID)
-		s.logger.Log(ctx, models.TicketLogger, &user.ID, &ticket.Author.ID, models.CloseTicket, fmt.Sprintf("ID: %v | Title: %v", ticketID, ticket.Title))
+		s.logger.Log(ctx, models.AdminTicketLogger, &user.ID, &ticket.Author.ID, models.CloseTicket, fmt.Sprintf("ID: %v | Title: %v", ticketID, ticket.Title))
 	}
 
 	return ticket, nil
+}
+
+func (s *Service) ChangeTicketCategory(ctx context.Context, ticketID uint64, newCategory string, user *models.User) (*models.Ticket, error) {
+	ticket, err := s.repo.PopulateTicket(ctx, ticketID)
+	if err != nil {
+		return nil, err
+	}
+
+	isHandler := ticket.Handler != nil && ticket.Handler.ID == user.ID
+	if !isHandler {
+		return nil, fiber.NewError(fiber.StatusForbidden, "category of this ticket can only be changed by the staff member who is handling this ticket")
+	}
+
+	oldCategory := ticket.Category
+
+	ChangeCategoryErr := s.repo.ChangeTicketCategory(ctx, ticket.ID, newCategory)
+	if ChangeCategoryErr != nil {
+		return nil, ChangeCategoryErr
+	}
+
+	ticket.Category = newCategory
+
+	s.notify.SendNotification(ctx, ticket.AuthorID, models.Information, "Your ticket has been updated", fmt.Sprintf("Category of your ticket #%v has been changed by an admin to %s", ticket.ID, ticket.Category), &user.ID)
+	s.logger.Log(ctx, models.AdminTicketLogger, &user.ID, &ticket.Author.ID, models.ChangeTicketCategory, fmt.Sprintf("ID: %v | Title: %s\nCategory before: %s | Category after: %s", ticketID, ticket.Title, oldCategory, newCategory))
+
+	return ticket, nil
+}
+
+func (s *Service) DeleteTicket(ctx context.Context) {
+
 }

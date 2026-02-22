@@ -31,7 +31,6 @@ type Repository interface {
 	HardDelete(ctx context.Context, id uint64) error
 	Restore(ctx context.Context, user *models.User) error
 	CreateBan(ctx context.Context, ban *models.BanModel) error
-	GetActiveBan(ctx context.Context, userID uint64) (*models.BanModelDTO, error)
 	DeleteBan(ctx context.Context, userID uint64) error
 	ChangeUserData(ctx context.Context, u *models.User, updateName, updateEmail, updatePassword bool) error
 	EditUserFlags(ctx context.Context, userID uint64, flags []string) (*models.User, error)
@@ -65,13 +64,6 @@ func (s *Service) SearchUser(ctx context.Context, adminID uint64, id uint64) (*m
 		return nil, fiber.ErrNotFound
 	}
 
-	ban, _ := s.repo.GetActiveBan(ctx, id)
-	user.ActiveBan = ban
-
-	if id != adminID {
-		s.logger.Log(ctx, models.CommonLogger, &adminID, &id, models.SearchByUserID)
-	}
-
 	return user, nil
 }
 
@@ -92,9 +84,6 @@ func (s *Service) GetOwnAccount(ctx context.Context, id uint64) (*models.User, e
 	if user == nil {
 		return nil, &fiber.Error{Code: 401, Message: "not authorized to get their own info"}
 	}
-
-	ban, _ := s.repo.GetActiveBan(ctx, id)
-	user.ActiveBan = ban
 
 	return user, nil
 }
@@ -129,11 +118,8 @@ func (s *Service) BanUser(ctx context.Context, adminID, userID uint64, unbanDate
 	}
 
 	addInfo := fmt.Sprintf("reason: %s\nuntil: %s", reason, unbanDate.String())
-	s.logger.Log(ctx, models.PunishmentLogger, &adminID, &userID, models.Ban, addInfo)
+	s.logger.Log(ctx, models.StaffPunishmentLogger, &adminID, &userID, models.Ban, addInfo)
 
-	user.ActiveBan = &models.BanModelDTO{
-		BanModel: *ban,
-	}
 	return user, nil
 }
 
@@ -146,17 +132,15 @@ func (s *Service) UnbanUser(ctx context.Context, adminID, userID uint64) (*model
 		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
 	}
 
-	activeBan, _ := s.repo.GetActiveBan(ctx, userID)
-	if activeBan != nil {
-		if err := s.repo.DeleteBan(ctx, userID); err != nil {
-			return nil, err
-		}
-	}
-
 	user.ActiveBanID = nil
 	user.ActiveBan = nil
 
-	s.logger.Log(ctx, models.PunishmentLogger, &adminID, &userID, models.Unban)
+	err = s.repo.DeleteBan(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Log(ctx, models.StaffPunishmentLogger, &adminID, &userID, models.Unban)
 
 	return user, nil
 }
@@ -190,7 +174,7 @@ func (s *Service) CreateUser(ctx *fiber.Ctx, adminID uint64, name, email, passwo
 		return nil, err
 	}
 
-	s.logger.Log(ctx.UserContext(), models.CommonLogger, &adminID, nil, models.Create, "with nickname "+name)
+	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &adminID, nil, models.Create, "with nickname "+name)
 
 	return user, nil
 }
@@ -204,13 +188,13 @@ func (s *Service) DeleteUser(ctx context.Context, adminID uint64, id uint64) (*m
 	}
 
 	if r.HasFlag("MANAGER") {
-		s.logger.Log(ctx, models.CommonLogger, &adminID, &id, models.TriedToDeleteManager)
+		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.TriedToDeleteManager)
 
 		return nil, fiber.ErrForbidden
 	}
 
 	if u.IsDeleted {
-		s.logger.Log(ctx, models.CommonLogger, &adminID, &id, models.HardDelete)
+		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.HardDelete)
 
 		if err := s.repo.HardDelete(ctx, id); err != nil {
 			return nil, err
@@ -219,7 +203,7 @@ func (s *Service) DeleteUser(ctx context.Context, adminID uint64, id uint64) (*m
 		return nil, nil
 	}
 
-	s.logger.Log(ctx, models.CommonLogger, &adminID, &id, models.SoftDelete)
+	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.SoftDelete)
 
 	u.IsDeleted = true
 	u.UpdatedAt = time.Now()
@@ -245,7 +229,7 @@ func (s *Service) RestoreUser(ctx context.Context, adminID uint64, id uint64) (*
 		return u, fiber.ErrBadRequest
 	}
 
-	s.logger.Log(ctx, models.CommonLogger, &adminID, &id, models.RestoreUser)
+	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.RestoreUser)
 
 	u.IsDeleted = false
 	u.UpdatedAt = time.Now()
@@ -289,7 +273,7 @@ func (s *Service) SetStaffRank(ctx context.Context, adminID uint64, userID uint6
 
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s (%d)", oldRankName, newRank.Name, newRank.ID)
 
-	s.logger.Log(ctx, models.CommonLogger, &adminID, &userID, models.SetStaffRank, addInfo)
+	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.SetStaffRank, addInfo)
 	s.notifier.SendNotification(ctx, userID, models.Success, "You've been assigned", fmt.Sprintf("You have been assigned as staff member. Your new staff rank is %s", newRank.Name), &adminID)
 
 	return updatedUser, nil
@@ -321,7 +305,7 @@ func (s *Service) EditUserFlags(ctx context.Context, senderID uint64, userID uin
 	}
 
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldFlags, strings.Join(*updatedUser.Flags, ", "))
-	s.logger.Log(ctx, models.CommonLogger, &senderID, &userID, models.ChangeFlags, addInfo)
+	s.logger.Log(ctx, models.StaffCommonLogger, &senderID, &userID, models.ChangeFlags, addInfo)
 	s.notifier.SendNotification(ctx, userID, models.Success, "Your personal flags has been updated", fmt.Sprintf("Your personal flags has been updated. Your new flags is: %s", updatedUser.Flags), &senderID)
 
 	return updatedUser, nil
@@ -363,7 +347,7 @@ func (s *Service) SetDeveloperRank(ctx context.Context, adminID uint64, userId u
 	}
 
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s (%d)", oldRankInfo, r.Name, r.ID)
-	s.logger.Log(ctx, models.CommonLogger, &adminID, &userId, models.SetDeveloperRank, addInfo)
+	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userId, models.SetDeveloperRank, addInfo)
 	s.notifier.SendNotification(ctx, userId, models.Success, "You've been assigned", fmt.Sprintf("You have been assigned as developer. Your new developer rank is %s", r.Name), &adminID)
 
 	return setRank, nil
@@ -405,10 +389,10 @@ func (s *Service) ChangeUser(ctx context.Context, adminID uint64, userID uint64,
 
 	if password == nil {
 		addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldInfo, newInfo)
-		s.logger.Log(ctx, models.CommonLogger, &adminID, &userID, models.ChangeUserData, addInfo)
+		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.ChangeUserData, addInfo)
 		s.notifier.SendNotification(ctx, userID, models.Error, "Your credentials has been changed", "Your username or e-mail has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", &adminID)
 	} else {
-		s.logger.Log(ctx, models.CommonLogger, &adminID, &userID, models.ChangeUserPassword)
+		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.ChangeUserPassword)
 		s.notifier.SendNotification(ctx, userID, models.Error, "Your password has been changed", "Your password has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", &adminID)
 	}
 
@@ -426,7 +410,7 @@ func (s *Service) ResetUserSensitiveData(ctx *fiber.Ctx, senderID uint64, userID
 		return nil, fiber.NewError(1, err.Error())
 	}
 
-	s.logger.Log(ctx.UserContext(), models.CommonLogger, &senderID, &userID, models.ResetUserSensetiveData)
+	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &senderID, &userID, models.ResetUserSensetiveData)
 
 	return u, nil
 }

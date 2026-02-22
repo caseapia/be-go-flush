@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gookit/slog"
@@ -45,6 +44,10 @@ func (r *Repository) SearchTicketByID(ctx context.Context, ticketID uint64) (*mo
 		return nil, nil, err
 	}
 
+	if messages == nil {
+		messages = make([]models.TicketMessage, 0)
+	}
+
 	return &ticket, &messages, nil
 }
 
@@ -62,41 +65,30 @@ func (r *Repository) PopulateTicket(ctx context.Context, ticketID uint64) (*mode
 	return t, err
 }
 
-func (r *Repository) TicketAssignment(ctx context.Context, ticketID uint64, userID uint64) (*models.Ticket, error) {
-	var ticket models.Ticket
-
-	res, err := r.db.NewUpdate().
+func (r *Repository) TicketAssignment(ctx context.Context, ticketID uint64, userID uint64) error {
+	_, err := r.db.NewUpdate().
 		Model((*models.Ticket)(nil)).
 		Set("handling_by = ?", userID).
 		Where("id = ?", ticketID).
 		Exec(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if rows == 0 {
-		return nil, sql.ErrNoRows
-	}
-
-	err = r.db.NewSelect().
-		Model(&ticket).
-		Relation("Author").
-		Relation("Handler").
-		Where("?TableAlias.id = ?", ticketID).
-		Scan(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ticket, nil
+	return nil
 }
 
-func (r *Repository) TicketUnassignment(ctx context.Context) {
+func (r *Repository) TicketUnassignment(ctx context.Context, ticketID uint64) error {
+	_, err := r.db.NewUpdate().
+		Model((*models.Ticket)(nil)).
+		Set("handling_by = ?", nil).
+		Where("id = ?", ticketID).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
 
+	return nil
 }
 
 func (r *Repository) PopulateAllUserTickets(ctx context.Context, userID uint64) ([]models.Ticket, error) {
@@ -110,6 +102,10 @@ func (r *Repository) PopulateAllUserTickets(ctx context.Context, userID uint64) 
 		Scan(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if tickets == nil {
+		tickets = make([]models.Ticket, 0)
 	}
 
 	return tickets, nil
@@ -170,39 +166,47 @@ func (r *Repository) PopulateTicketMessages(ctx context.Context, ticketID uint64
 		return nil, err
 	}
 
+	if messages == nil {
+		messages = make([]models.TicketMessage, 0)
+	}
+
 	return messages, err
 }
 
-func (r *Repository) CloseTicket(ctx context.Context, ticketID uint64) (*models.Ticket, error) {
-	var ticket models.Ticket
-
-	res, err := r.db.NewUpdate().
+func (r *Repository) CloseTicket(ctx context.Context, ticketID uint64) error {
+	_, err := r.db.NewUpdate().
 		Model((*models.Ticket)(nil)).
 		Set("status = ?", models.Closed).
 		Where("id = ?", ticketID).
 		Exec(ctx)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
+	return nil
+}
 
-	rows, err := res.RowsAffected()
+func (r *Repository) ChangeTicketCategory(ctx context.Context, ticketID uint64, newCategory string) error {
+	_, err := r.db.NewUpdate().
+		Model((*models.Ticket)(nil)).
+		Set("category = ?", newCategory).
+		Where("id = ?", ticketID).
+		Exec(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if rows == 0 {
-		return nil, sql.ErrNoRows
+		return err
 	}
 
-	err = r.db.NewSelect().
-		Model(&ticket).
-		Relation("Author").
-		Relation("Handler").
-		Where("?TableAlias.id = ?", ticketID).
-		Scan(ctx)
+	return nil
+}
+
+func (r *Repository) DeleteTicket(ctx context.Context, ticketID uint64) error {
+	_, err := r.db.NewDelete().
+		Model((*models.Ticket)(nil)).
+		Where("id = ?", ticketID).
+		Exec(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &ticket, nil
+	return nil
 }

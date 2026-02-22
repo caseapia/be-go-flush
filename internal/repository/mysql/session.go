@@ -22,9 +22,8 @@ func (r *Repository) UpdateSession(ctx context.Context, s *models.Session) error
 }
 
 func (r *Repository) RevokeSession(ctx context.Context, sessionID string) error {
-	_, err := r.db.NewUpdate().
+	_, err := r.db.NewDelete().
 		Model((*models.Session)(nil)).
-		Set("revoked = ?", true).
 		Where("id = ?", sessionID).
 		Exec(ctx)
 	return err

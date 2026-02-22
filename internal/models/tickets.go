@@ -47,6 +47,10 @@ type TicketCreationInput struct {
 	FirstMessage string `json:"message"`
 }
 
+type TicketCategoryChangingInput struct {
+	NewCategory string `bun:"category,notnull" json:"newCategory"`
+}
+
 // Ticket message
 type TicketMessage struct {
 	bun.BaseModel `bun:"table:tickets_messages"`

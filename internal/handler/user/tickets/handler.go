@@ -155,16 +155,39 @@ func (h *Handler) CloseTicket(ctx *fiber.Ctx) error {
 	return ctx.Status(fiber.StatusOK).JSON(ticket)
 }
 
+func (h *Handler) ChangeCategory(ctx *fiber.Ctx) error {
+	id, _ := strconv.Atoi(ctx.Params("id"))
+
+	uVal := ctx.Locals("user")
+	u, ok := uVal.(*models.User)
+	if !ok {
+		return &fiber.Error{Code: 401, Message: "unauthorized"}
+	}
+
+	var input models.TicketCategoryChangingInput
+	if err := ctx.BodyParser(&input); err != nil {
+		return err
+	}
+
+	ticket, err := h.service.ChangeTicketCategory(ctx.UserContext(), uint64(id), input.NewCategory, u)
+	if err != nil {
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(ticket)
+}
+
 func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group := router.Group("/tickets")
 	groupAdmin := router.Group("/admin/tickets")
 
-	group.Post("/create", h.CreateTicket)                                               // Create ticket
-	group.Get("/populate/:id", h.PopulateTicket)                                        // Populate one ticket
-	group.Get("/mytickets", h.PopulateAllUserTickets)                                   // Populate all tickets created by selected user
-	group.Get("/populate/messages/:id", h.PopulateTicketMessages)                       // Populate ticket messages
-	group.Post("/send", h.CreateTicketMessage)                                          // Create message in a ticket
-	group.Patch("/close/:id", h.CloseTicket)                                            // Close ticket
-	groupAdmin.Get("/populate", middleware.RequireFlag("STAFF"), h.SearchTickets)       // Populate all tickets existed in database
-	groupAdmin.Post("/assign/:id", middleware.RequireFlag("STAFF"), h.TicketAssignment) // Assign an admin to the ticket
+	group.Post("/create", h.CreateTicket)                                                     // Create ticket
+	group.Get("/populate/:id", h.PopulateTicket)                                              // Populate one ticket
+	group.Get("/mytickets", h.PopulateAllUserTickets)                                         // Populate all tickets created by selected user
+	group.Get("/populate/messages/:id", h.PopulateTicketMessages)                             // Populate ticket messages
+	group.Post("/send", h.CreateTicketMessage)                                                // Create message in a ticket
+	group.Patch("/close/:id", h.CloseTicket)                                                  // Close ticket
+	groupAdmin.Get("/populate", middleware.RequireFlag("STAFF"), h.SearchTickets)             // ~ Populate all tickets existed in database
+	groupAdmin.Post("/assign/:id", middleware.RequireFlag("STAFF"), h.TicketAssignment)       // ~ Assign an admin to the ticket
+	groupAdmin.Patch("/edit/category/:id", middleware.RequireFlag("STAFF"), h.ChangeCategory) // ~ Change category of ticket
 }

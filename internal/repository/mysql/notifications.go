@@ -19,6 +19,10 @@ func (r *Repository) PopulateNotifications(ctx context.Context, userID uint64) (
 		Limit(COLUMNS_LIMIT).
 		Scan(ctx)
 
+	if notifications == nil {
+		notifications = make([]models.Notification, 0)
+	}
+
 	return notifications, err
 }
 
@@ -44,6 +48,10 @@ func (r *Repository) ReadNotifications(ctx context.Context, userID uint64) []mod
 		Scan(ctx)
 	if err != nil {
 		slog.WithData(slog.M{"error": err}).Error("error occured when trying to mark notifications as readed")
+	}
+
+	if notifications == nil {
+		notifications = make([]models.Notification, 0)
 	}
 
 	return notifications

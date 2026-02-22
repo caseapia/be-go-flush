@@ -14,6 +14,11 @@ func (r *Repository) SearchAllRanks(ctx context.Context) ([]models.RankStructure
 		Relation("Developers").
 		Limit(COLUMNS_LIMIT).
 		Scan(ctx)
+
+	if ranks == nil {
+		ranks = make([]models.RankStructure, 0)
+	}
+
 	return ranks, err
 }
 

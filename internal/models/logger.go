@@ -10,9 +10,10 @@ type LoggerType string
 type Action string
 
 const (
-	CommonLogger     = "common"
-	PunishmentLogger = "punish"
-	TicketLogger     = "tickets"
+	StaffCommonLogger     = "staffCommon"
+	StaffPunishmentLogger = "staffPunish"
+	AdminTicketLogger     = "adminTickets"
+	AdminAuthLogger       = "adminAuth"
 )
 
 const (
@@ -38,13 +39,20 @@ const (
 	DeleteInvite           Action = "has deleted invite code"
 	ChangeUserData         Action = "has changed user's data"
 	ChangeUserPassword     Action = "has changed user's password"
-	ResetUserSensetiveData Action = "has reset user IPs and last seen information"
+	ResetUserSensetiveData Action = "has reset user IPs and last seen info"
 	EditRank               Action = "has edited rank"
 	LookupNotifications    Action = "lookup user notifications"
 	SendNotification       Action = "send notify"
 	DeleteNotification     Action = "has deleted notification"
 	AssignedToTicket       Action = "has assigned to the ticket"
+	UnassignFromTicket     Action = "has unassign himself from ticket"
 	CloseTicket            Action = "has closed ticket"
+	ChangeTicketCategory   Action = "has changed ticket category"
+	DeleteTicket           Action = "has deleted a ticket"
+	RevealSensetiveData    Action = "revealed sensetive data"
+	UserRegister           Action = "just registered"
+	UserLogin              Action = "just log in"
+	UserLogout             Action = "just log out"
 )
 
 type BaseLog struct {
@@ -61,8 +69,8 @@ type CommonLog struct {
 	UserID  *uint64 `bun:"user_id" json:"-"`
 	Limit   int     `bun:"-" json:"limit"`
 
-	User  *User `bun:"rel:belongs-to,join:user_id=id" json:"user"`
-	Admin *User `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
+	User  *LogUser `bun:"rel:belongs-to,join:user_id=id" json:"user"`
+	Admin *LogUser `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
 }
 type PunishmentLog struct {
 	bun.BaseModel `bun:"table:admin_punishments"`
@@ -71,8 +79,8 @@ type PunishmentLog struct {
 	UserID  *uint64 `bun:"user_id" json:"-"`
 	Limit   int     `bun:"-" json:"limit"`
 
-	User  *User `bun:"rel:belongs-to,join:user_id=id" json:"user"`
-	Admin *User `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
+	User  *LogUser `bun:"rel:belongs-to,join:user_id=id" json:"user"`
+	Admin *LogUser `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
 }
 
 type TicketsLog struct {
@@ -81,9 +89,17 @@ type TicketsLog struct {
 	AdminID uint64  `bun:"admin_id,notnull" json:"-"`
 	UserID  *uint64 `bun:"user_id" json:"-"`
 
-	Limit int   `bun:"-" json:"limit"`
-	User  *User `bun:"rel:belongs-to,join:user_id=id" json:"user"`
-	Admin *User `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
+	Limit int      `bun:"-" json:"limit"`
+	User  *LogUser `bun:"rel:belongs-to,join:user_id=id" json:"user"`
+	Admin *LogUser `bun:"rel:belongs-to,join:admin_id=id" json:"admin"`
+}
+
+type AuthLog struct {
+	bun.BaseModel `bun:"table:auth_log"`
+	BaseLog
+	UserID *uint64 `bun:"user_id" json:"-"`
+
+	User *LogUser `bun:"rel:belongs-to,join:user_id=id" json:"user"`
 }
 
 type LogPopulate struct {
@@ -91,4 +107,9 @@ type LogPopulate struct {
 	EndDate   string     `json:"dateEnd"`
 	Type      LoggerType `json:"type"`
 	Keywords  *string    `json:"keywords"`
+}
+
+type LogUser struct {
+	bun.BaseModel `bun:"table:flushproject.users"`
+	User
 }
