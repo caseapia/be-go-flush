@@ -79,7 +79,7 @@ func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
 func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
 	userID, err := strconv.ParseUint(c.Params("id"), 10, 64)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid user ID")
+		return fiber.NewError(fiber.StatusBadRequest, "invalid user ID "+err.Error())
 	}
 
 	val := c.Locals("user")
@@ -90,7 +90,7 @@ func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
 
 	user, err := h.service.SearchUser(c.Context(), sender.ID, userID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "user not found")
+		return fiber.NewError(fiber.StatusNotFound, "user not found "+err.Error())
 	}
 
 	return c.JSON(user.GetPrivateData())
@@ -106,8 +106,9 @@ func (h *Handler) BanUser(c *fiber.Ctx) error {
 	}
 
 	var input models.BanRequest
-
-	c.BodyParser(&input)
+	if err := c.BodyParser(&input); err != nil {
+		return &fiber.Error{Code: 400, Message: "invalid request"}
+	}
 
 	ban, err := h.service.BanUser(c.UserContext(), admin.ID, uint64(id), input.UnbanDate, input.Reason)
 	if err != nil {
@@ -325,6 +326,31 @@ func (h *Handler) EditUserFlags(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(u)
 }
 
+func (h *Handler) EditUserBadges(c *fiber.Ctx) error {
+	userID, err := c.ParamsInt("id")
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
+	}
+
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+	}
+
+	var input models.EditUserBadgesRequest
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+
+	u, err := h.service.EditUserBadges(c.UserContext(), sender.ID, uint64(userID), input.NewBadges)
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).JSON(u)
+}
+
 func (h *Handler) ResetUserSensetiveData(c *fiber.Ctx) error {
 	userID, err := c.ParamsInt("id")
 	if err != nil {
@@ -349,8 +375,8 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group := router.Group("/user")
 	groupAdmin := router.Group("/admin/user")
 
-	group.Get("/all", h.SearchAllUsers)
 	group.Get("/account", h.GetOwnAccount)
+	groupAdmin.Get("/all", middleware.RequireFlag("ADMIN"), h.SearchAllUsers)
 	group.Get("/:id", h.SearchUserByID)
 
 	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)
@@ -364,4 +390,5 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	groupAdmin.Patch("/edit/:id", middleware.RequireFlag("MANAGER"), h.ChangeUser)
 	groupAdmin.Patch("/editflag/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.EditUserFlags)
 	groupAdmin.Delete("/reset/:id", middleware.RequireFlag("SENIOR"), h.ResetUserSensetiveData)
+	groupAdmin.Patch("/editbadges/:id", middleware.RequireFlag("SENIOR"), h.EditUserBadges)
 }

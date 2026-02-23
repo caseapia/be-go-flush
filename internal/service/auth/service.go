@@ -58,7 +58,7 @@ func (s *Service) Register(ctx context.Context, name, invite, email, password, i
 func (s *Service) Login(ctx context.Context, login, password, userAgent, ip string) (string, string, error) {
 	user, err := s.repository.SearchByLogin(ctx, login)
 	if err != nil {
-		return "", "", fiber.NewError(401, "invalid credentials")
+		return "", "", fiber.NewError(401, err.Error())
 	}
 
 	if !hash.CheckPassword(user.Password, password) {

@@ -13,15 +13,26 @@ import (
 	"github.com/uptrace/bun"
 )
 
+func (r *Repository) populateUserBadges(ctx context.Context, u *models.User) error {
+	if len(u.BadgeIDs) == 0 {
+		u.Badges = make([]models.Badge, 0)
+		return nil
+	}
+
+	err := r.db.NewSelect().
+		Model(&u.Badges).
+		Where("id IN (?)", bun.In(u.BadgeIDs)).
+		Scan(ctx)
+
+	return err
+}
 func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.User, error) {
 	u := &models.User{ID: id}
 
 	err := r.db.NewSelect().
 		Model(u).
 		WherePK().
-		Relation("ActiveBan", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.JoinOn("active_ban.expiration_date > NOW()")
-		}).
+		Relation("ActiveBan").
 		Relation("ActiveBan.Admin").
 		Relation("ActiveBan.Target").
 		Scan(ctx)
@@ -31,6 +42,15 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	u.Badges = make([]models.Badge, 0)
+	if u.BadgeIDs == nil {
+		u.BadgeIDs = make([]uint64, 0)
+	}
+
+	if len(u.BadgeIDs) > 0 {
+		_ = r.populateUserBadges(ctx, u)
 	}
 
 	return u, nil
@@ -41,13 +61,11 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 
 	err := r.db.NewSelect().
 		Model(u).
-		Where("name = ?", name).
-		Relation("ActiveBan", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.JoinOn("active_ban.expiration_date > NOW()")
-		}).
+		Where("user.name = ?", name).
+		Relation("ActiveBan").
 		Relation("ActiveBan.Admin").
 		Relation("ActiveBan.Target").
-		Limit(USER_COLUMNS_LIMIT).
+		Limit(1).
 		Scan(ctx)
 
 	if err != nil {
@@ -55,6 +73,15 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	u.Badges = make([]models.Badge, 0)
+	if u.BadgeIDs == nil {
+		u.BadgeIDs = make([]uint64, 0)
+	}
+
+	if len(u.BadgeIDs) > 0 {
+		_ = r.populateUserBadges(ctx, u)
 	}
 
 	return u, nil
@@ -65,21 +92,30 @@ func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) 
 
 	err := r.db.NewSelect().
 		Model(&users).
-		Relation("ActiveBan", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.JoinOn("active_ban.expiration_date > NOW()")
-		}).
+		Relation("ActiveBan").
 		Relation("ActiveBan.Admin").
 		Relation("ActiveBan.Target").
 		Scan(ctx)
+
 	if err != nil {
 		return nil, err
 	}
 
-	if users == nil {
-		users = make([]models.User, 0)
+	if len(users) == 0 {
+		return []models.User{}, nil
 	}
 
-	return users, err
+	for i := range users {
+		users[i].Badges = make([]models.Badge, 0)
+
+		if len(users[i].BadgeIDs) > 0 {
+			if err := r.populateUserBadges(ctx, &users[i]); err != nil {
+				slog.Errorf("failed to populate badges for user %d: %v", users[i].ID, err)
+			}
+		}
+	}
+
+	return users, nil
 }
 
 func (r *Repository) UpdateUser(ctx context.Context, user *models.User) error {
@@ -224,6 +260,19 @@ func (r *Repository) EditUserFlags(ctx context.Context, userID uint64, flags []s
 	_, err := r.db.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("staff_flags = ?", flags).
+		Where("id = ?", userID).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.SearchUserByID(ctx, userID)
+}
+
+func (r *Repository) EditUserBadges(ctx context.Context, userID uint64, badgeIDs []uint64) (*models.User, error) {
+	_, err := r.db.NewUpdate().
+		Model((*models.User)(nil)).
+		Set("badges = ?", badgeIDs).
 		Where("id = ?", userID).
 		Exec(ctx)
 	if err != nil {

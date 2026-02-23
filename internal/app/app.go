@@ -1,6 +1,9 @@
 package app
 
 import (
+	"flag"
+	"log"
+	"os"
 	"time"
 
 	"github.com/caseapia/goproject-flush/config"
@@ -10,15 +13,18 @@ import (
 	"github.com/caseapia/goproject-flush/internal/handler/logger"
 	"github.com/caseapia/goproject-flush/internal/handler/ranks"
 	"github.com/caseapia/goproject-flush/internal/handler/user"
+	"github.com/caseapia/goproject-flush/internal/handler/user/badges"
 	"github.com/caseapia/goproject-flush/internal/handler/user/notifications"
 	"github.com/caseapia/goproject-flush/internal/handler/user/tickets"
 	"github.com/caseapia/goproject-flush/internal/middleware"
+	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
 	authService "github.com/caseapia/goproject-flush/internal/service/auth"
 	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
 	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
 	ranksService "github.com/caseapia/goproject-flush/internal/service/ranks"
 	userService "github.com/caseapia/goproject-flush/internal/service/user"
+	badgesService "github.com/caseapia/goproject-flush/internal/service/user/badges"
 	notifyService "github.com/caseapia/goproject-flush/internal/service/user/notifications"
 	ticketsService "github.com/caseapia/goproject-flush/internal/service/user/tickets"
 	"github.com/gofiber/fiber/v2"
@@ -30,6 +36,9 @@ import (
 )
 
 func NewApp() (*fiber.App, error) {
+	migrateFlag := flag.Bool("migrate", false, "run database migrations and exit")
+	flag.Parse()
+
 	config.LoadEnv()
 	setupLogger()
 
@@ -40,14 +49,26 @@ func NewApp() (*fiber.App, error) {
 	mainRepo := mysqlRepo.NewRepository(dbs.Main)
 	logsRepo := mysqlRepo.NewRepository(dbs.Logs)
 
+	if *migrateFlag {
+		if err := mysql.RunMigrations(dbs.Main, mysql.MainModels); err != nil {
+			log.Fatal(err)
+		}
+		if err := mysql.RunMigrations(dbs.Logs, mysql.LogModels); err != nil {
+			log.Fatal(err)
+		}
+		os.Exit(0)
+	}
+
 	loggerSrv := loggerService.NewService(*logsRepo)
+	badgesSrv := badgesService.NewService(*mainRepo, *loggerSrv)
 	notifySrv := notifyService.NewService(*mainRepo, *loggerSrv)
 	ranksSrv := ranksService.NewService(mainRepo, loggerSrv)
-	userSrv := userService.NewService(mainRepo, loggerSrv, notifySrv)
+	userSrv := userService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 	inviteSrv := inviteService.NewService(mainRepo, *loggerSrv)
 	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
 
+	badgesHandler := badges.NewHandler(badgesSrv)
 	authHandler := auth.NewHandler(authSrv, inviteSrv)
 	userHandler := user.NewUserHandler(userSrv, ranksSrv)
 	inviteHandler := invite.NewHandler(inviteSrv)
@@ -128,6 +149,7 @@ func NewApp() (*fiber.App, error) {
 	ranksHandler.RegisterRoutes(private)
 	notifyHandler.RegisterRoutes(private)
 	ticketsHandler.RegisterRoutes(private)
+	badgesHandler.RegisterRoutes(private)
 
 	return app, nil
 }

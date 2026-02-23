@@ -53,6 +53,10 @@ const (
 	UserRegister           Action = "just registered"
 	UserLogin              Action = "just log in"
 	UserLogout             Action = "just log out"
+	CreateBadge            Action = "created a badge"
+	EditBadge              Action = "edited a badge"
+	DeleteBadge            Action = "deleted a badge"
+	AwardUser              Action = "has awarded"
 )
 
 type BaseLog struct {

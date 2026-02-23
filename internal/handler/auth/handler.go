@@ -75,7 +75,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	var input models.LoginBody
 
 	if err := c.BodyParser(&input); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid body"})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
 	access, refresh, err := h.authService.Login(c.Context(), input.Login, input.Password, c.Get("User-Agent"), c.IP())

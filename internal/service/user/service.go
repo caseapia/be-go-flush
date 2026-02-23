@@ -8,46 +8,21 @@ import (
 	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/repository/mysql"
+	"github.com/caseapia/goproject-flush/internal/service/logger"
+	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Logger interface {
-	Log(ctx context.Context, loggerType models.LoggerType, adminID *uint64, userID *uint64, action interface{}, additional ...string)
-}
-
-type Notifications interface {
-	SendNotification(ctx context.Context, userID uint64, notifyType models.NotificationsType, title, text string, senderID *uint64)
-}
-
-type Repository interface {
-	SearchUserByID(ctx context.Context, id uint64) (*models.User, error)
-	SearchAllUsers(ctx context.Context) ([]models.User, error)
-	UpdateUser(ctx context.Context, user *models.User) error
-	SearchUserByName(ctx context.Context, name string) (*models.User, error)
-	CreateUser(ctx context.Context, user *models.User) error
-	SoftDelete(ctx context.Context, u *models.User) error
-	HardDelete(ctx context.Context, id uint64) error
-	Restore(ctx context.Context, user *models.User) error
-	CreateBan(ctx context.Context, ban *models.BanModel) error
-	DeleteBan(ctx context.Context, userID uint64) error
-	ChangeUserData(ctx context.Context, u *models.User, updateName, updateEmail, updatePassword bool) error
-	EditUserFlags(ctx context.Context, userID uint64, flags []string) (*models.User, error)
-	ResetUserSensitiveData(ctx *fiber.Ctx, userID uint64) error
-
-	SearchRankByID(ctx context.Context, id int) (*models.RankStructure, error)
-	SetStaffRank(ctx context.Context, userID uint64, rankID int) (*models.User, error)
-	SetDeveloperRank(ctx context.Context, userID uint64, rankID int) (*models.User, error)
-}
-
 type Service struct {
-	repo     Repository
-	logger   Logger
-	notifier Notifications
+	repo     mysql.Repository
+	logger   logger.Service
+	notifier notifications.Service
 }
 
-func NewService(r Repository, l Logger, n Notifications) *Service {
+func NewService(r mysql.Repository, l logger.Service, n notifications.Service) *Service {
 	return &Service{
 		repo:     r,
 		logger:   l,
@@ -307,6 +282,18 @@ func (s *Service) EditUserFlags(ctx context.Context, senderID uint64, userID uin
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldFlags, strings.Join(*updatedUser.Flags, ", "))
 	s.logger.Log(ctx, models.StaffCommonLogger, &senderID, &userID, models.ChangeFlags, addInfo)
 	s.notifier.SendNotification(ctx, userID, models.Success, "Your personal flags has been updated", fmt.Sprintf("Your personal flags has been updated. Your new flags is: %s", updatedUser.Flags), &senderID)
+
+	return updatedUser, nil
+}
+
+func (s *Service) EditUserBadges(ctx context.Context, senderID uint64, userID uint64, badges []uint64) (*models.User, error) {
+	updatedUser, err := s.repo.EditUserBadges(ctx, userID, badges)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	s.notifier.SendNotification(ctx, userID, models.Success, "You've been awarded!", "You have been awarded with a new badge", &senderID)
+	s.logger.Log(ctx, models.StaffCommonLogger, &senderID, &userID, models.AwardUser)
 
 	return updatedUser, nil
 }

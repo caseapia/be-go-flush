@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/uptrace/bun"
 )
 
@@ -17,11 +16,13 @@ type User struct {
 	UpdatedAt time.Time  `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
 	DeletedAt *time.Time `bun:"deleted_at,nullzero" json:"-"`
 	LastLogin *time.Time `bun:"last_login" json:"lastLogin"`
+	BadgeIDs  []uint64   `bun:"badges,type:json" json:"-"`
+	Badges    []Badge    `bun:"-" json:"badges"`
 
 	// Staff
 	StaffRank     int       `bun:"staff_rank,default:1" json:"staffRank"`
 	DeveloperRank int       `bun:"developer_rank,default:1" json:"developerRank"`
-	Flags         *[]string `bun:"staff_flags" json:"staffFlags"`
+	Flags         *[]string `bun:"staff_flags,type:json" json:"staffFlags"`
 
 	// Restrictions
 	ActiveBanID *uint64   `bun:"active_ban" json:"-"`
@@ -37,6 +38,17 @@ type User struct {
 	Email      string `bun:"email" json:"email"`
 	RegisterIP string `bun:"register_ip" json:"-"`
 	LastIP     string `bun:"last_ip" json:"-"`
+}
+
+type UserRelationResponse struct {
+	bun.BaseModel `bun:"table:users"`
+	// Basic
+	ID   uint64 `bun:"id,pk,autoincrement,unique" json:"id"`
+	Name string `bun:"name,unique,notnull" json:"name"`
+
+	// Staff
+	StaffRank     int `bun:"staff_rank,default:1" json:"staffRank"`
+	DeveloperRank int `bun:"developer_rank,default:1" json:"developerRank"`
 }
 
 type BanRequest struct {
@@ -64,24 +76,8 @@ type EditUserFlagsRequest struct {
 	NewFlags []string `json:"flags"`
 }
 
-func (u *User) SetStaffRank(rank int) (*User, error) {
-	if u.IsDeleted {
-		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
-	}
-
-	u.StaffRank = rank
-	u.UpdatedAt = time.Now()
-	return u, nil
-}
-
-func (u *User) SetDeveloperRank(rank int) (*User, error) {
-	if u.IsDeleted {
-		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
-	}
-
-	u.DeveloperRank = rank
-	u.UpdatedAt = time.Now()
-	return u, nil
+type EditUserBadgesRequest struct {
+	NewBadges []uint64 `json:"badges"`
 }
 
 func (u *User) UserHasFlag(flag string) bool {
