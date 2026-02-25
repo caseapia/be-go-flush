@@ -57,6 +57,9 @@ const (
 	EditBadge              Action = "edited a badge"
 	DeleteBadge            Action = "deleted a badge"
 	AwardUser              Action = "has awarded"
+	LinkDiscord            Action = "linked his discord"
+	UnlinkDiscord          Action = "unlinked his discord"
+	ForceUnlinkUserDiscord Action = "force unlinked discord"
 )
 
 type BaseLog struct {

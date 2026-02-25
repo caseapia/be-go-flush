@@ -31,7 +31,9 @@ type User struct {
 	IsVerified  bool      `bun:"is_verified" json:"isVerified"`
 
 	// Auth
-	TokenVersion int `bun:"token_version" json:"-"`
+	TokenVersion int     `bun:"token_version" json:"-"`
+	DiscordName  *string `bun:"discord_name" json:"discordName"`
+	DiscordID    *string `bun:"discord_id" json:"discordID"`
 
 	// Sensitive Data
 	Password   string `bun:"password" json:"-"`

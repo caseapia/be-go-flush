@@ -20,9 +20,7 @@ type Claims struct {
 }
 
 func (s *Service) ValidateAccessToken(tokenStr string) (uint64, error) {
-	if strings.HasPrefix(tokenStr, "Bearer ") {
-		tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
-	}
+	tokenStr = strings.TrimPrefix(tokenStr, "Bearer ")
 
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {

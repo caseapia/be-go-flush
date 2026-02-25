@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caseapia/goproject-flush/config"
+	"github.com/caseapia/goproject-flush/internal/clients/discord"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
@@ -22,10 +24,12 @@ type Service struct {
 	repository mysql.Repository
 	logger     logger.Service
 	notifier   notifications.Service
+	discord    *discord.Client
+	cfg        *config.Config
 }
 
-func NewService(userRepo mysql.Repository, logger logger.Service, notifier notifications.Service) *Service {
-	return &Service{repository: userRepo, logger: logger, notifier: notifier}
+func NewService(userRepo mysql.Repository, logger logger.Service, notifier notifications.Service, discord *discord.Client, cfg *config.Config) *Service {
+	return &Service{repository: userRepo, logger: logger, notifier: notifier, discord: discord, cfg: cfg}
 }
 
 var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}

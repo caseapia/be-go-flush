@@ -2,11 +2,13 @@ package app
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
 
 	"github.com/caseapia/goproject-flush/config"
+	"github.com/caseapia/goproject-flush/internal/clients/discord"
 	database "github.com/caseapia/goproject-flush/internal/db"
 	"github.com/caseapia/goproject-flush/internal/handler/auth"
 	"github.com/caseapia/goproject-flush/internal/handler/invite"
@@ -37,10 +39,22 @@ import (
 
 func NewApp() (*fiber.App, error) {
 	migrateFlag := flag.Bool("migrate", false, "run database migrations and exit")
+	debugFlag := flag.Bool("debug", false, "debug app with display of incoming requests")
 	flag.Parse()
 
 	config.LoadEnv()
 	setupLogger()
+
+	cfg := config.Load()
+
+	discordClient := discord.NewClient(
+		cfg.DiscordClientID,
+		cfg.DiscordClientSecret,
+		cfg.DiscordRedirectURI(),
+	)
+
+	fmt.Println("CLIENT_ID:", cfg.DiscordClientID)
+	fmt.Println("REDIRECT:", cfg.DiscordRedirectURI())
 
 	dbs, err := database.NewDatabases()
 	if err != nil {
@@ -65,12 +79,12 @@ func NewApp() (*fiber.App, error) {
 	ranksSrv := ranksService.NewService(mainRepo, loggerSrv)
 	userSrv := userService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 	inviteSrv := inviteService.NewService(mainRepo, *loggerSrv)
-	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv)
+	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv, discordClient, cfg)
 	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
 
 	badgesHandler := badges.NewHandler(badgesSrv)
 	authHandler := auth.NewHandler(authSrv, inviteSrv)
-	userHandler := user.NewUserHandler(userSrv, ranksSrv)
+	userHandler := user.NewUserHandler(userSrv, ranksSrv, authSrv)
 	inviteHandler := invite.NewHandler(inviteSrv)
 	loggerHandler := logger.NewHandler(loggerSrv)
 	ranksHandler := ranks.NewHandler(ranksSrv)
@@ -93,10 +107,36 @@ func NewApp() (*fiber.App, error) {
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080",
-		AllowMethods: "GET,POST,PUT,DELETE,PATCH,OPTIONS",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, Cache-Control",
+		AllowOrigins:     "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080",
+		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Cache-Control",
+		AllowCredentials: true,
 	}))
+
+	if *debugFlag {
+		fmt.Print("debug started. Incoming requests will be displayed")
+
+		app.Use(func(c *fiber.Ctx) error {
+			start := time.Now()
+
+			err := c.Next()
+
+			stop := time.Since(start)
+
+			slog.WithData(slog.M{
+				"method":  c.Method(),
+				"path":    c.Path(),
+				"status":  c.Response().StatusCode(),
+				"latency": stop.String(),
+				"ip":      c.IP(),
+				"ua":      c.Get("User-Agent"),
+				"body":    string(c.Body()),
+				"query":   c.Queries(),
+			}).Info("Inbound request")
+
+			return err
+		})
+	}
 
 	app.Get("/api/ping", func(c *fiber.Ctx) error {
 		v, err := mem.VirtualMemory()

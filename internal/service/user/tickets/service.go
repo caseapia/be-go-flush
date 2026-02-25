@@ -27,13 +27,42 @@ func NewService(r mysql.Repository, n notifications.Service, l logger.Service) *
 	}
 }
 
-func (s *Service) SearchTickets(ctx context.Context) ([]models.Ticket, int, error) {
-	tickets, columns, err := s.repo.SearchTickets(ctx)
+func (s *Service) SearchTickets(ctx context.Context, user *models.User) ([]models.Ticket, int, error) {
+	staffRank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
-		return nil, 0, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		return nil, 0, err
 	}
 
-	return tickets, columns, err
+	developerRank, err := s.repo.SearchRankByID(ctx, user.DeveloperRank)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	isUserHasPermissionToViewClosedTickets := user.UserHasFlag("SENIOR")
+	isRankHasPermissionToViewClosedTickets := staffRank.HasFlag("SENIOR") || developerRank.HasFlag("LEADDEV")
+
+	var tickets []models.Ticket
+	var columns int
+
+	if !isUserHasPermissionToViewClosedTickets && !isRankHasPermissionToViewClosedTickets {
+		openedTickets, openedTicketsColumns, err := s.repo.SearchOpenedTickets(ctx)
+		if err != nil {
+			return nil, 0, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+
+		tickets = openedTickets
+		columns = openedTicketsColumns
+	} else {
+		closedTickets, closedTicketsColumns, err := s.repo.SearchAllTickets(ctx)
+		if err != nil {
+			return nil, 0, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+		}
+
+		tickets = closedTickets
+		columns = closedTicketsColumns
+	}
+
+	return tickets, columns, nil
 }
 
 func (s *Service) PopulateTicket(ctx context.Context, ticketID uint64, user *models.User) (*models.Ticket, error) {
@@ -41,14 +70,28 @@ func (s *Service) PopulateTicket(ctx context.Context, ticketID uint64, user *mod
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
+	staffRank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
+	if err != nil {
+		return nil, err
+	}
+
+	developerRank, err := s.repo.SearchRankByID(ctx, user.DeveloperRank)
+	if err != nil {
+		return nil, err
+	}
 
 	isAuthor := ticket.Author.ID == user.ID
 	isStaff := user.UserHasFlag("STAFF")
-	rankIsStaff := rank.HasFlag("STAFF")
+	rankIsStaff := staffRank.HasFlag("STAFF") || developerRank.HasFlag("STAFF")
+	isUserHasPermissionToViewClosedTickets := user.UserHasFlag("SENIOR")
+	isRankHasPermissionToViewClosedTickets := staffRank.HasFlag("SENIOR") || developerRank.HasFlag("LEADDEV")
 
 	if !isAuthor && !(isStaff || rankIsStaff) {
 		return nil, fiber.NewError(fiber.StatusForbidden, "you have no access to this ticket")
+	}
+
+	if !isAuthor && ticket.Status == models.Closed && !(isUserHasPermissionToViewClosedTickets || isRankHasPermissionToViewClosedTickets) {
+		return nil, fiber.NewError(fiber.StatusNotFound, "selected ticket was not found")
 	}
 
 	return ticket, nil
@@ -102,7 +145,7 @@ func (s *Service) CreateTicket(ctx context.Context, user models.User, title, cat
 	return ticket, nil
 }
 
-func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket, user *models.User, content string) (*models.TicketMessage, error) {
+func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket, user *models.User, content string) (*[]models.TicketMessage, error) {
 	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, err
@@ -144,7 +187,7 @@ func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket
 		handlerID = &ticket.Handler.ID
 	}
 
-	message, err := s.repo.CreateTicketMessage(ctx, models.TicketMessage{
+	messages, err := s.repo.CreateTicketMessage(ctx, models.TicketMessage{
 		TicketID:  ticket.ID,
 		AuthorID:  user.ID,
 		CreatedAt: time.Now(),
@@ -154,7 +197,7 @@ func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket
 		return nil, err
 	}
 
-	return message, nil
+	return &messages, nil
 }
 
 func (s *Service) PopulateTicketMessages(ctx context.Context, ticketID uint64, user *models.User) (*[]models.TicketMessage, error) {

@@ -118,12 +118,23 @@ func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) 
 	return users, nil
 }
 
-func (r *Repository) UpdateUser(ctx context.Context, user *models.User) error {
-	_, err := r.db.NewUpdate().
-		Model(user).
-		WherePK().
-		Exec(ctx)
-	return err
+func (r *Repository) UpdateUser(ctx context.Context, user *models.User, columns ...string) (*models.User, error) {
+	query := r.db.NewUpdate().Model(user).WherePK()
+
+	if len(columns) > 0 {
+		query.Column(columns...)
+	} else {
+		query.ExcludeColumn("created_at")
+	}
+
+	_, err := query.Exec(ctx)
+
+	updatedUser, err := r.SearchUserByID(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedUser, err
 }
 
 // ! Admin actions
@@ -143,6 +154,36 @@ func (r *Repository) SoftDelete(ctx context.Context, u *models.User) error {
 		WherePK().
 		Exec(ctx)
 	return err
+}
+
+func (r *Repository) LookupByDiscordID(ctx context.Context, discordID string) (*models.User, error) {
+	u := new(models.User)
+
+	err := r.db.NewSelect().
+		Model(u).
+		Where("user.discord_id = ?", discordID).
+		Relation("ActiveBan").
+		Relation("ActiveBan.Admin").
+		Relation("ActiveBan.Target").
+		Limit(1).
+		Scan(ctx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	u.Badges = make([]models.Badge, 0)
+	if u.BadgeIDs == nil {
+		u.BadgeIDs = make([]uint64, 0)
+	}
+
+	if len(u.BadgeIDs) > 0 {
+		_ = r.populateUserBadges(ctx, u)
+	}
+
+	return u, nil
 }
 
 func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateName, updateEmail, updatePassword bool) error {

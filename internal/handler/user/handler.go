@@ -5,6 +5,7 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/gofiber/fiber/v2"
@@ -14,10 +15,11 @@ import (
 type Handler struct {
 	service *user.Service
 	rank    *ranks.Service
+	auth    *auth.Service
 }
 
-func NewUserHandler(s *user.Service, r *ranks.Service) *Handler {
-	return &Handler{service: s, rank: r}
+func NewUserHandler(s *user.Service, r *ranks.Service, a *auth.Service) *Handler {
+	return &Handler{service: s, rank: r, auth: a}
 }
 
 func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
@@ -371,6 +373,29 @@ func (h *Handler) ResetUserSensetiveData(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(u)
 }
 
+func (h *Handler) ForceUnlinkUserDiscord(c *fiber.Ctx) error {
+	userID, err := c.ParamsInt("id")
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
+	}
+
+	val := c.Locals("user")
+	sender, ok := val.(*models.User)
+	if !ok {
+		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+	}
+
+	u, err := h.auth.UnlinkDiscord(c.UserContext(), sender, uint64(userID))
+	if err != nil {
+		return err
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Discord successfully force unlinked",
+		"user":    u,
+	})
+}
+
 func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group := router.Group("/user")
 	groupAdmin := router.Group("/admin/user")
@@ -391,4 +416,5 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	groupAdmin.Patch("/editflag/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.EditUserFlags)
 	groupAdmin.Delete("/reset/:id", middleware.RequireFlag("SENIOR"), h.ResetUserSensetiveData)
 	groupAdmin.Patch("/editbadges/:id", middleware.RequireFlag("SENIOR"), h.EditUserBadges)
+	groupAdmin.Delete("/discord/forceunlink/:id", middleware.RequireFlag("SENIOR"), h.ForceUnlinkUserDiscord)
 }

@@ -19,12 +19,12 @@ func NewHandler(s *tickets.Service) *Handler {
 
 func (h *Handler) SearchTickets(ctx *fiber.Ctx) error {
 	uVal := ctx.Locals("user")
-	_, ok := uVal.(*models.User)
+	u, ok := uVal.(*models.User)
 	if !ok {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	tickets, _, err := h.service.SearchTickets(ctx.UserContext())
+	tickets, _, err := h.service.SearchTickets(ctx.UserContext(), u)
 	if err != nil {
 		return err
 	}
@@ -96,12 +96,12 @@ func (h *Handler) CreateTicketMessage(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	message, err := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, u, input.Content)
+	messages, err := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, u, input.Content)
 	if err != nil {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(message)
+	return ctx.Status(fiber.StatusCreated).JSON(messages)
 }
 
 func (h *Handler) PopulateTicketMessages(ctx *fiber.Ctx) error {

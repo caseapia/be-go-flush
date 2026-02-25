@@ -7,7 +7,26 @@ import (
 	"github.com/gookit/slog"
 )
 
-func (r *Repository) SearchTickets(ctx context.Context) ([]models.Ticket, int, error) {
+func (r *Repository) SearchOpenedTickets(ctx context.Context) ([]models.Ticket, int, error) {
+	var tickets []models.Ticket
+
+	query := r.db.NewSelect().
+		Model(&tickets).
+		Where("status != ?", "closed").
+		Order("created_at ASC").
+		Relation("Author").
+		Relation("Handler").
+		Limit(COLUMNS_LIMIT)
+
+	err := query.Scan(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tickets, COLUMNS_LIMIT, nil
+}
+
+func (r *Repository) SearchAllTickets(ctx context.Context) ([]models.Ticket, int, error) {
 	var tickets []models.Ticket
 
 	query := r.db.NewSelect().
@@ -18,7 +37,11 @@ func (r *Repository) SearchTickets(ctx context.Context) ([]models.Ticket, int, e
 		Limit(COLUMNS_LIMIT)
 
 	err := query.Scan(ctx)
-	return tickets, COLUMNS_LIMIT, err
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return tickets, COLUMNS_LIMIT, nil
 }
 
 func (r *Repository) SearchTicketByID(ctx context.Context, ticketID uint64) (*models.Ticket, *[]models.TicketMessage, error) {
@@ -124,33 +147,19 @@ func (r *Repository) CreateTicket(ctx context.Context, entry models.Ticket) (*mo
 	return &entry, nil
 }
 
-func (r *Repository) CreateTicketMessage(ctx context.Context, entry models.TicketMessage, handlerID *uint64) (*models.TicketMessage, error) {
-	_, err := r.db.NewInsert().
-		Model(&entry).
-		Exec(ctx)
-	if err != nil {
-		slog.WithData(slog.M{"error": err, "entry": entry}).Error("failed to send message in ticket")
+func (r *Repository) SetTicketStatus(ctx context.Context, ticketID uint64, newStatus models.TicketStatus) (*models.Ticket, error) {
+	t := new(models.Ticket)
 
-		return nil, err
-	}
-
-	var newStatus models.Status
-	if handlerID != nil && entry.AuthorID == *handlerID {
-		newStatus = models.Open
-	} else {
-		newStatus = models.Pending
-	}
-
-	_, err = r.db.NewUpdate().
-		Model((*models.Ticket)(nil)).
+	_, err := r.db.NewUpdate().
+		Model(t).
 		Set("status = ?", newStatus).
-		Where("id = ?", entry.TicketID).
+		Where("id = ?", ticketID).
 		Exec(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return &entry, nil
+	return t, nil
 }
 
 func (r *Repository) PopulateTicketMessages(ctx context.Context, ticketID uint64) ([]models.TicketMessage, error) {
@@ -171,6 +180,41 @@ func (r *Repository) PopulateTicketMessages(ctx context.Context, ticketID uint64
 	}
 
 	return messages, err
+}
+
+func (r *Repository) CreateTicketMessage(ctx context.Context, entry models.TicketMessage, handlerID *uint64) ([]models.TicketMessage, error) {
+	_, err := r.db.NewInsert().
+		Model(&entry).
+		Returning("*").
+		Exec(ctx)
+	if err != nil {
+		slog.WithData(slog.M{"error": err, "entry": entry}).Error("failed to send message in ticket")
+
+		return nil, err
+	}
+
+	var newStatus models.TicketStatus
+	if handlerID != nil && entry.AuthorID == *handlerID {
+		newStatus = models.Open
+	} else {
+		newStatus = models.Pending
+	}
+
+	_, statusErr := r.SetTicketStatus(ctx, entry.TicketID, newStatus)
+	if statusErr != nil {
+		return nil, statusErr
+	}
+
+	messages, err := r.PopulateTicketMessages(ctx, entry.TicketID)
+	if err != nil {
+		return nil, err
+	}
+
+	if messages == nil {
+		messages = make([]models.TicketMessage, 0)
+	}
+
+	return messages, nil
 }
 
 func (r *Repository) CloseTicket(ctx context.Context, ticketID uint64) error {

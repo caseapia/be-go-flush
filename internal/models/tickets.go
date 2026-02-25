@@ -6,36 +6,36 @@ import (
 	"github.com/uptrace/bun"
 )
 
-type Status string
-type Priority string
+type TicketStatus string
+type TicketPriority string
 
 const (
-	Open     Status = "Waiting for user"
-	Closed   Status = "Closed"
-	Pending  Status = "Waiting for staff"
-	Resolved Status = "Resolved"
+	Open     TicketStatus = "Waiting for user"
+	Closed   TicketStatus = "Closed"
+	Pending  TicketStatus = "Waiting for staff"
+	Resolved TicketStatus = "Resolved"
 )
 
 const (
-	Low      Priority = "Low"
-	Medium   Priority = "Medium"
-	High     Priority = "High"
-	Critical Priority = "Critical"
+	Low      TicketPriority = "Low"
+	Medium   TicketPriority = "Medium"
+	High     TicketPriority = "High"
+	Critical TicketPriority = "Critical"
 )
 
 // Ticket
 type Ticket struct {
 	bun.BaseModel `bun:"table:tickets"`
 
-	ID        uint64    `bun:"id,pk,autoincrement" json:"id"`
-	CreatedAt time.Time `bun:"created_at,notnull" json:"createdAt"`
-	Status    Status    `bun:"status,notnull" json:"status"`
-	Priority  Priority  `bun:"priority" json:"prioriy"`
-	AuthorID  uint64    `bun:"author_id,notnull" json:"-"`
-	HandledBy *uint64   `bun:"handling_by" json:"-"`
-	Title     string    `bun:"title,notnull" json:"title"`
-	Category  string    `bun:"category,notnull" json:"category"`
-	UpdatedAt time.Time `bun:"updated_at" json:"updatedAt"`
+	ID        uint64         `bun:"id,pk,autoincrement" json:"id"`
+	CreatedAt time.Time      `bun:"created_at,notnull" json:"createdAt"`
+	Status    TicketStatus   `bun:"status,notnull" json:"status"`
+	Priority  TicketPriority `bun:"priority" json:"prioriy"`
+	AuthorID  uint64         `bun:"author_id,notnull" json:"-"`
+	HandledBy *uint64        `bun:"handling_by" json:"-"`
+	Title     string         `bun:"title,notnull" json:"title"`
+	Category  string         `bun:"category,notnull" json:"category"`
+	UpdatedAt time.Time      `bun:"updated_at" json:"updatedAt"`
 
 	Author  *TicketAuthor  `bun:"rel:belongs-to,join:author_id=id" json:"author"`
 	Handler *TicketHandler `bun:"rel:belongs-to,join:handling_by=id" json:"handler"`

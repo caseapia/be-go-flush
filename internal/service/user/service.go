@@ -187,7 +187,7 @@ func (s *Service) DeleteUser(ctx context.Context, adminID uint64, id uint64) (*m
 		return nil, err
 	}
 
-	if err := s.repo.UpdateUser(ctx, u); err != nil {
+	if _, err := s.repo.UpdateUser(ctx, u); err != nil {
 		return nil, err
 	}
 
@@ -213,11 +213,12 @@ func (s *Service) RestoreUser(ctx context.Context, adminID uint64, id uint64) (*
 		return nil, err
 	}
 
-	if err := s.repo.UpdateUser(ctx, u); err != nil {
+	restoredUser, err := s.repo.UpdateUser(ctx, u)
+	if err != nil {
 		return nil, err
 	}
 
-	return u, nil
+	return restoredUser, nil
 }
 
 func (s *Service) SetStaffRank(ctx context.Context, adminID uint64, userID uint64, rankID int) (*models.User, error) {
@@ -329,7 +330,7 @@ func (s *Service) SetDeveloperRank(ctx context.Context, adminID uint64, userId u
 		return nil, err
 	}
 
-	if err := s.repo.UpdateUser(ctx, setRank); err != nil {
+	if _, err := s.repo.UpdateUser(ctx, setRank); err != nil {
 		return nil, err
 	}
 
