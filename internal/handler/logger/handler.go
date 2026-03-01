@@ -3,9 +3,9 @@ package logger
 import (
 	"log"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -65,13 +65,5 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.JSON(logs)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	adminGroup := router.Group("/admin/logs")
-	staffGroup := router.Group("/admin/logs/staff")
-
-	adminGroup.Post("/populate", middleware.RequireFlag("ADMIN"), h.SearchLogs)
-	staffGroup.Post("/populate", middleware.RequireFlag("STAFFMANAGEMENT"), h.SearchLogs)
+	return utils.Success(c, 200, logs)
 }

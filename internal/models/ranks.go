@@ -2,7 +2,7 @@ package models
 
 import "github.com/uptrace/bun"
 
-type RankStructure struct {
+type Rank struct {
 	bun.BaseModel `bun:"table:ranks"`
 	ID            int      `bun:"column:id,pk,autoincrement" json:"id"`
 	Name          string   `bun:"column:name" json:"name"`
@@ -13,13 +13,21 @@ type RankStructure struct {
 	Developers []User `bun:"rel:has-many,join:id=developer_rank" json:"developers,omitempty"`
 }
 
-type CreateRankBody struct {
+type RankRelation struct {
+	bun.BaseModel `bun:"table:ranks"`
+
+	ID    int    `bun:"column:id,pk,autoincrement" json:"id"`
+	Name  string `bun:"column:name" json:"name"`
+	Color string `bun:"column:color" json:"color"`
+}
+
+type CreateRankRequest struct {
 	Name  string   `json:"name"`
 	Color string   `json:"color"`
 	Flags []string `json:"flags"`
 }
 
-func (r *RankStructure) HasFlag(flag string) bool {
+func (r *Rank) HasFlag(flag string) bool {
 	for _, f := range r.Flags {
 		if f == flag {
 			return true

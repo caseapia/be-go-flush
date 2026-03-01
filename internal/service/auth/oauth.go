@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -39,19 +40,20 @@ func (s *Service) GetOAuthURL(c *fiber.Ctx) (string, string, error) {
 	return authURL, state, nil
 }
 
-func (s *Service) validateState(c *fiber.Ctx, state string) bool {
-	cookieState := c.Cookies("discord_oauth_state")
+func (s *Service) validateState(state, savedState string) bool {
+	isValid := savedState != "" && savedState == state
 
 	slog.WithData(slog.M{
-		"cookieState": cookieState,
-		"state":       cookieState != "" && cookieState == state,
-	}).Debug("Discord OAUTH state validation")
+		"received_state": state,
+		"saved_state":    savedState,
+		"is_valid":       isValid,
+	}).Debug("Discord OAUTH state validation (sessionStorage)")
 
-	return cookieState != "" && cookieState == state
+	return isValid
 }
 
-func (s *Service) LinkDiscord(ctx *fiber.Ctx, userID uint64, code, state string) (*models.User, error) {
-	if !s.validateState(ctx, state) {
+func (s *Service) LinkDiscord(ctx *fiber.Ctx, userID uint64, code, state, savedState string) (*models.User, error) {
+	if !s.validateState(state, savedState) {
 		return nil, fiber.NewError(fiber.StatusBadRequest, "invalid state")
 	}
 
@@ -75,6 +77,7 @@ func (s *Service) LinkDiscord(ctx *fiber.Ctx, userID uint64, code, state string)
 
 	user, err := s.repository.UpdateUser(
 		ctx.UserContext(),
+		s.repository.DB,
 		&models.User{
 			ID:          userID,
 			DiscordID:   &discordUser.ID,
@@ -90,7 +93,7 @@ func (s *Service) LinkDiscord(ctx *fiber.Ctx, userID uint64, code, state string)
 	ctx.ClearCookie("discord_oauth_state")
 
 	addInfo := fmt.Sprintf("Discord ID: %v | Discord name: %s | Discord username: %s", discordUser.ID, discordUser.GlobalName, discordUser.Username)
-	s.logger.Log(ctx.UserContext(), models.AdminAuthLogger, nil, &userID, models.LinkDiscord, addInfo)
+	s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &userID, enums.LinkDiscord, addInfo)
 
 	return user, nil
 }
@@ -107,7 +110,7 @@ func (s *Service) UnlinkDiscord(ctx context.Context, sender *models.User, userID
 
 	oldDiscordID := *user.DiscordID
 
-	user, err = s.repository.UpdateUser(ctx, &models.User{
+	user, err = s.repository.UpdateUser(ctx, s.repository.DB, &models.User{
 		ID:          user.ID,
 		DiscordID:   nil,
 		DiscordName: nil,
@@ -120,9 +123,9 @@ func (s *Service) UnlinkDiscord(ctx context.Context, sender *models.User, userID
 	}
 
 	if sender.ID == user.ID {
-		s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UnlinkDiscord, "Discord ID: "+oldDiscordID)
+		s.logger.Log(ctx, enums.AdminAuthLogger, nil, &user.ID, enums.UnlinkDiscord, "Discord ID: "+oldDiscordID)
 	} else {
-		s.logger.Log(ctx, models.StaffCommonLogger, &sender.ID, &user.ID, models.ForceUnlinkUserDiscord, "Discord ID: "+oldDiscordID)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &sender.ID, &user.ID, enums.ForceUnlinkUserDiscord, "Discord ID: "+oldDiscordID)
 	}
 
 	return user, nil

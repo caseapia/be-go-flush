@@ -3,11 +3,11 @@ package user
 import (
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/service/user"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -32,7 +32,7 @@ func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
-	return c.JSON(users)
+	return utils.Success(c, 200, users)
 }
 
 func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
@@ -51,7 +51,7 @@ func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
-	return c.JSON(user)
+	return utils.Success(c, 200, user)
 }
 
 // ! Admin actions
@@ -75,7 +75,7 @@ func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
@@ -95,7 +95,7 @@ func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusNotFound, "user not found "+err.Error())
 	}
 
-	return c.JSON(user.GetPrivateData())
+	return utils.Success(c, 200, user)
 }
 
 func (h *Handler) BanUser(c *fiber.Ctx) error {
@@ -117,7 +117,7 @@ func (h *Handler) BanUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(ban)
+	return utils.Success(c, 200, ban)
 }
 
 func (h *Handler) UnbanUser(c *fiber.Ctx) error {
@@ -134,7 +134,7 @@ func (h *Handler) UnbanUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(unban)
+	return utils.Success(c, 200, unban)
 }
 
 func (h *Handler) CreateUser(c *fiber.Ctx) error {
@@ -155,7 +155,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(newUser)
+	return utils.Success(c, 201, newUser)
 }
 
 func (h *Handler) DeleteUser(c *fiber.Ctx) error {
@@ -172,7 +172,7 @@ func (h *Handler) DeleteUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(deleted)
+	return utils.Success(c, 200, deleted)
 }
 
 func (h *Handler) RestoreUser(c *fiber.Ctx) error {
@@ -189,7 +189,7 @@ func (h *Handler) RestoreUser(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(restored)
+	return utils.Success(c, 200, restored)
 }
 
 func (h *Handler) SetStaffRank(c *fiber.Ctx) error {
@@ -223,7 +223,7 @@ func (h *Handler) SetStaffRank(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
@@ -257,7 +257,7 @@ func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) ChangeUser(c *fiber.Ctx) error {
@@ -290,16 +290,12 @@ func (h *Handler) ChangeUser(c *fiber.Ctx) error {
 		}
 	}
 
-	slog.WithData(slog.M{
-		"data_body": input,
-	}).Debug("received data")
-
-	u, err := h.service.ChangeUser(c.UserContext(), sender.ID, uint64(userID), input.Name, input.Email, input.Password)
+	u, err := h.service.ChangeUser(c.UserContext(), sender.ID, uint64(userID), input)
 	if err != nil {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) EditUserFlags(c *fiber.Ctx) error {
@@ -325,7 +321,7 @@ func (h *Handler) EditUserFlags(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) EditUserBadges(c *fiber.Ctx) error {
@@ -350,7 +346,7 @@ func (h *Handler) EditUserBadges(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) ResetUserSensetiveData(c *fiber.Ctx) error {
@@ -370,7 +366,7 @@ func (h *Handler) ResetUserSensetiveData(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(u)
+	return utils.Success(c, 200, u)
 }
 
 func (h *Handler) ForceUnlinkUserDiscord(c *fiber.Ctx) error {
@@ -390,31 +386,20 @@ func (h *Handler) ForceUnlinkUserDiscord(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Discord successfully force unlinked",
-		"user":    u,
-	})
+	return utils.Success(c, 200, u)
 }
 
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/user")
-	groupAdmin := router.Group("/admin/user")
+func (h *Handler) PopulateBanList(c *fiber.Ctx) error {
+	val := c.Locals("user")
+	_, ok := val.(*models.User)
+	if !ok {
+		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+	}
 
-	group.Get("/account", h.GetOwnAccount)
-	groupAdmin.Get("/all", middleware.RequireFlag("ADMIN"), h.SearchAllUsers)
-	group.Get("/:id", h.SearchUserByID)
+	b, err := h.service.PopulateBanList(c.UserContext())
+	if err != nil {
+		return err
+	}
 
-	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)
-	groupAdmin.Patch("/ban/:id", middleware.RequireFlag("ADMIN"), h.BanUser)
-	groupAdmin.Delete("/unban/:id", middleware.RequireFlag("ADMIN"), h.UnbanUser)
-	groupAdmin.Delete("/delete/:id", middleware.RequireFlag("SENIOR"), h.DeleteUser)
-	groupAdmin.Put("/restore/:id", middleware.RequireFlag("MANAGER"), h.RestoreUser)
-	groupAdmin.Patch("/rank/staff/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.SetStaffRank)
-	groupAdmin.Patch("/rank/developer/:id", middleware.RequireFlag("MANAGER"), h.SetDeveloperRank)
-	groupAdmin.Get("/:id", middleware.RequireFlag("ADMIN"), h.GetUserPrivate)
-	groupAdmin.Patch("/edit/:id", middleware.RequireFlag("MANAGER"), h.ChangeUser)
-	groupAdmin.Patch("/editflag/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.EditUserFlags)
-	groupAdmin.Delete("/reset/:id", middleware.RequireFlag("SENIOR"), h.ResetUserSensetiveData)
-	groupAdmin.Patch("/editbadges/:id", middleware.RequireFlag("SENIOR"), h.EditUserBadges)
-	groupAdmin.Delete("/discord/forceunlink/:id", middleware.RequireFlag("SENIOR"), h.ForceUnlinkUserDiscord)
+	return utils.Success(c, 200, b)
 }

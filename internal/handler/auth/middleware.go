@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/caseapia/goproject-flush/internal/service/auth"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
-	"github.com/gookit/slog"
 )
 
 func AuthMiddleware(authSrv *auth.Service) fiber.Handler {
@@ -37,12 +37,9 @@ func AuthMiddleware(authSrv *auth.Service) fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid token data")
 		}
 
-		if user.ActiveBanID != nil {
-			slog.WithData(slog.M{
-				"user":        user,
-				"activeBanID": user.ActiveBanID,
-			}).Error("user action stopped due to active ban")
-			return fiber.NewError(fiber.StatusForbidden, "action forbidden due to active ban")
+		_, stateError := account.CheckAccountStatus(user)
+		if stateError != nil {
+			return stateError
 		}
 
 		c.Locals("user", user)

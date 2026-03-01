@@ -5,12 +5,13 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gofiber/fiber/v2"
+	"github.com/uptrace/bun"
 )
 
 func (r *Repository) SearchAllInvites(ctx context.Context) ([]models.Invite, error) {
 	var invites []models.Invite
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&invites).
 		Relation("Creator").
 		Relation("User").
@@ -25,16 +26,16 @@ func (r *Repository) SearchAllInvites(ctx context.Context) ([]models.Invite, err
 	return invites, err
 }
 
-func (r *Repository) CreateInvite(ctx context.Context, invite *models.Invite) error {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateInvite(ctx context.Context, tx bun.IDB, invite *models.Invite) error {
+	_, err := tx.NewInsert().
 		Model(invite).
 		Exec(ctx)
 
 	return err
 }
 
-func (r *Repository) DeleteInvite(ctx context.Context, inviteID uint64) error {
-	_, err := r.db.NewDelete().
+func (r *Repository) DeleteInvite(ctx context.Context, tx bun.IDB, inviteID uint64) error {
+	_, err := tx.NewDelete().
 		Model((*models.Invite)(nil)).
 		Where("id = ?", inviteID).
 		Exec(ctx)
@@ -45,7 +46,7 @@ func (r *Repository) DeleteInvite(ctx context.Context, inviteID uint64) error {
 func (r *Repository) SearchInviteByCode(ctx context.Context, code string) (*models.Invite, error) {
 	invite := new(models.Invite)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(invite).
 		Where("code = ?", code).
 		Limit(1).
@@ -60,7 +61,7 @@ func (r *Repository) SearchInviteByCode(ctx context.Context, code string) (*mode
 func (r *Repository) SearchInviteByID(ctx context.Context, id uint64) (*models.Invite, error) {
 	invite := new(models.Invite)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(invite).
 		Where("id = ?", id).
 		Limit(1).
@@ -72,8 +73,8 @@ func (r *Repository) SearchInviteByID(ctx context.Context, id uint64) (*models.I
 	return invite, err
 }
 
-func (r *Repository) MarkInviteAsUsed(ctx context.Context, inviteID, usedBy uint64) error {
-	res, err := r.db.NewUpdate().
+func (r *Repository) MarkInviteAsUsed(ctx context.Context, tx bun.IDB, inviteID, usedBy uint64) error {
+	res, err := tx.NewUpdate().
 		Model((*models.Invite)(nil)).
 		Set("used = ?", true).
 		Set("used_by = ?", usedBy).

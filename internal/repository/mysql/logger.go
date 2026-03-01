@@ -10,7 +10,7 @@ import (
 )
 
 func (r *Repository) fetchLogs(ctx context.Context, dest interface{}, startDate, endDate, keywords string) error {
-	query := r.db.NewSelect().
+	query := r.DB.NewSelect().
 		Model(dest).
 		Relation("User").
 		Order("date ASC").
@@ -62,8 +62,10 @@ func (r *Repository) GetAuthLogs(ctx context.Context, startDate, endDate, keywor
 	return logs, LOGS_COLUMNS_LIMIT, err
 }
 
-func (r *Repository) SaveLog(ctx context.Context, entry interface{}) error {
-	_, err := r.db.NewInsert().Model(entry).Exec(ctx)
+func (r *Repository) SaveLog(ctx context.Context, tx bun.IDB, entry interface{}) error {
+	_, err := tx.NewInsert().
+		Model(entry).
+		Exec(ctx)
 	if err != nil {
 		slog.WithData(slog.M{"error": err}).Error("failed to insert log!")
 		return err

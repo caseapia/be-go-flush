@@ -76,9 +76,9 @@ func NewApp() (*fiber.App, error) {
 	loggerSrv := loggerService.NewService(*logsRepo)
 	badgesSrv := badgesService.NewService(*mainRepo, *loggerSrv)
 	notifySrv := notifyService.NewService(*mainRepo, *loggerSrv)
-	ranksSrv := ranksService.NewService(mainRepo, loggerSrv)
+	ranksSrv := ranksService.NewService(*mainRepo, *loggerSrv)
 	userSrv := userService.NewService(*mainRepo, *loggerSrv, *notifySrv)
-	inviteSrv := inviteService.NewService(mainRepo, *loggerSrv)
+	inviteSrv := inviteService.NewService(*mainRepo, *loggerSrv)
 	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv, discordClient, cfg)
 	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
 

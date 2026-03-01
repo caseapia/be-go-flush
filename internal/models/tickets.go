@@ -3,44 +3,49 @@ package models
 import (
 	"time"
 
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/uptrace/bun"
 )
 
-type TicketStatus string
-type TicketPriority string
-
-const (
-	Open     TicketStatus = "Waiting for user"
-	Closed   TicketStatus = "Closed"
-	Pending  TicketStatus = "Waiting for staff"
-	Resolved TicketStatus = "Resolved"
-)
-
-const (
-	Low      TicketPriority = "Low"
-	Medium   TicketPriority = "Medium"
-	High     TicketPriority = "High"
-	Critical TicketPriority = "Critical"
-)
-
-// Ticket
 type Ticket struct {
 	bun.BaseModel `bun:"table:tickets"`
 
-	ID        uint64         `bun:"id,pk,autoincrement" json:"id"`
-	CreatedAt time.Time      `bun:"created_at,notnull" json:"createdAt"`
-	Status    TicketStatus   `bun:"status,notnull" json:"status"`
-	Priority  TicketPriority `bun:"priority" json:"prioriy"`
-	AuthorID  uint64         `bun:"author_id,notnull" json:"-"`
-	HandledBy *uint64        `bun:"handling_by" json:"-"`
-	Title     string         `bun:"title,notnull" json:"title"`
-	Category  string         `bun:"category,notnull" json:"category"`
-	UpdatedAt time.Time      `bun:"updated_at" json:"updatedAt"`
+	ID        uint64               `bun:"id,pk,autoincrement" json:"id"`
+	CreatedAt time.Time            `bun:"created_at,notnull" json:"createdAt"`
+	Status    enums.TicketStatus   `bun:"status,notnull" json:"status"`
+	Priority  enums.TicketPriority `bun:"priority" json:"prioriy"`
+	AuthorID  uint64               `bun:"author_id,notnull" json:"authorID"`
+	HandledBy *uint64              `bun:"handling_by" json:"-"`
+	Title     string               `bun:"title,notnull" json:"title"`
+	Category  string               `bun:"category,notnull" json:"category"`
+	UpdatedAt time.Time            `bun:"updated_at" json:"updatedAt"`
 
-	Author  *TicketAuthor  `bun:"rel:belongs-to,join:author_id=id" json:"author"`
-	Handler *TicketHandler `bun:"rel:belongs-to,join:handling_by=id" json:"handler"`
+	Author  *TicketAuthor `bun:"rel:belongs-to,join:author_id=id" json:"author"`
+	Handler *UserRelation `bun:"rel:belongs-to,join:handling_by=id" json:"handler"`
+}
+type TicketMessage struct {
+	bun.BaseModel `bun:"table:tickets_messages"`
+
+	ID        uint64    `bun:"id,pk,autoincrement" json:"id"`
+	TicketID  uint64    `bun:"ticket_id,notnull" json:"ticketID"`
+	AuthorID  uint64    `bun:"author_id,notnull" json:"-"`
+	CreatedAt time.Time `bun:"created_at,notnull" json:"createdAt"`
+	Content   string    `bun:"content,notnull" json:"content"`
+
+	Author *UserRelation `bun:"rel:belongs-to,join:author_id=id" json:"author"`
 }
 
+type TicketAction struct {
+	bun.BaseModel `bun:"table:flushproject_logs.tickets_actions"`
+
+	ID        uint64    `bun:"id,pk,autoincrement" json:"id"`
+	CreatedAt time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+	TicketID  uint64    `bun:"ticket_id" json:"ticket_id"`
+	AuthorID  uint64    `bun:"author_id" json:"-"`
+	Action    string    `bun:"action" json:"action"`
+
+	Author *UserRelation `bun:"rel:belongs-to,join:author_id=id" json:"author"`
+}
 type TicketCreationInput struct {
 	Title        string `bun:"title,notnull" json:"title"`
 	Category     string `bun:"category,notnull" json:"category"`
@@ -51,19 +56,6 @@ type TicketCategoryChangingInput struct {
 	NewCategory string `bun:"category,notnull" json:"newCategory"`
 }
 
-// Ticket message
-type TicketMessage struct {
-	bun.BaseModel `bun:"table:tickets_messages"`
-
-	ID        uint64    `bun:"id,pk,autoincrement" json:"id"`
-	TicketID  uint64    `bun:"ticket_id,notnull" json:"ticketID"`
-	AuthorID  uint64    `bun:"author_id,notnull" json:"-"`
-	CreatedAt time.Time `bun:"created_at,notnull" json:"createdAt"`
-	Content   string    `bun:"content,notnull" json:"content"`
-
-	Author *TicketAuthor `bun:"rel:belongs-to,join:author_id=id" json:"author"`
-}
-
 type TicketMessageCreationInput struct {
 	Ticket   Ticket `json:"ticket"`
 	AuthorID uint64 `bun:"author_id,notnull" json:"author_id"`
@@ -71,20 +63,14 @@ type TicketMessageCreationInput struct {
 }
 
 type TicketAuthor struct {
-	bun.BaseModel `bun:"table:users"`
+	bun.BaseModel `bun:"table:flushproject.users"`
 
-	ID            uint64     `bun:"id,pk" json:"id"`
-	Name          string     `bun:"name" json:"name"`
-	LastLogin     *time.Time `bun:"last_login" json:"lastLogin"`
-	StaffRank     int        `bun:"staff_rank" json:"staffRank,omitempty"`
-	DeveloperRank int        `bun:"developer_rank" json:"developerRank,omitempty"`
+	UserRelation
+	LastLogin *time.Time `bun:"last_login" json:"lastLogin"`
 }
 
-type TicketHandler struct {
-	bun.BaseModel `bun:"table:users"`
-
-	ID            uint64 `bun:"id,pk" json:"id"`
-	Name          string `bun:"name" json:"name"`
-	StaffRank     int    `bun:"staff_rank" json:"staffRank"`
-	DeveloperRank int    `bun:"developer_rank" json:"developerRank"`
+type TicketResponse struct {
+	Ticket   Ticket          `json:"ticket"`
+	Messages []TicketMessage `json:"messages"`
+	Action   []TicketAction  `json:"actions"`
 }

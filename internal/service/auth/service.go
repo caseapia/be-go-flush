@@ -14,9 +14,11 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/hash"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/gookit/slog"
+	"github.com/uptrace/bun"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -34,7 +36,7 @@ func NewService(userRepo mysql.Repository, logger logger.Service, notifier notif
 
 var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}
 
-func (s *Service) Register(ctx context.Context, name, invite, email, password, ip string) (*models.User, error) {
+func (s *Service) Register(ctx *fiber.Ctx, name, invite, email, password, ip string) (*models.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -45,22 +47,20 @@ func (s *Service) Register(ctx context.Context, name, invite, email, password, i
 		Email:        email,
 		Password:     string(hash),
 		TokenVersion: 1,
-		IsVerified:   true,
+		Status:       0,
 		RegisterIP:   ip,
 	}
 
-	newUser, err := s.repository.Create(ctx, user)
+	newUser, err := s.repository.Create(ctx.UserContext(), s.repository.DB, user)
 	if err != nil {
 		return nil, err
 	}
 
-	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserRegister, fmt.Sprintf("Email: %s | IP: %s", user.Email, ip))
-
 	return newUser, nil
 }
 
-func (s *Service) Login(ctx context.Context, login, password, userAgent, ip string) (string, string, error) {
-	user, err := s.repository.SearchByLogin(ctx, login)
+func (s *Service) Login(ctx *fiber.Ctx, login, password, userAgent, ip string) (string, string, error) {
+	user, err := s.repository.SearchByLogin(ctx.UserContext(), login)
 	if err != nil {
 		return "", "", fiber.NewError(401, err.Error())
 	}
@@ -86,16 +86,29 @@ func (s *Service) Login(ctx context.Context, login, password, userAgent, ip stri
 		CreatedAt:   time.Now(),
 	}
 
-	if err := s.repository.CreateSession(ctx, session); err != nil {
-		return "", "", err
-	}
+	var accessToken string
+	err = s.repository.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		if _, err := s.repository.LockUser(ctx.UserContext(), tx, user.ID); err != nil {
+			return err
+		}
 
-	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserLogin, fmt.Sprintf("UserAgent: %s | IP: %s", session.UserAgent, session.IPLast))
+		if err := s.repository.CleanupExpiredSessions(ctx.UserContext(), tx, user.ID); err != nil {
+			return err
+		}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID, sessionID, user.TokenVersion)
-	if err != nil {
-		return "", "", err
-	}
+		if err := s.repository.CreateSession(ctx.UserContext(), tx, session); err != nil {
+			return err
+		}
+
+		if err := s.repository.UpdateLastLogin(ctx, tx, user.ID); err != nil {
+			return err
+		}
+
+		s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &user.ID, enums.UserLogin, fmt.Sprintf("UserAgent: %s | IP: %s", session.UserAgent, session.IPLast))
+
+		accessToken, err = utils.GenerateAccessToken(user.ID, sessionID, user.TokenVersion)
+		return err
+	})
 
 	return accessToken, refreshToken, nil
 }
@@ -120,22 +133,31 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, useragent, ip strin
 	session.RefreshHash = hash.HashToken(newRefreshToken)
 	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
 
-	if err := s.repository.UpdateSession(ctx, session); err != nil {
-		return "", "", err
-	}
+	var accessToken string
+	err = s.repository.WithTx(ctx, func(tx bun.Tx) error {
+		if err := s.repository.UpdateSession(ctx, tx, session); err != nil {
+			return err
+		}
 
-	accessToken, err := utils.GenerateAccessToken(user.ID, session.ID, user.TokenVersion)
-	if err != nil {
-		return "", "", err
-	}
+		accessToken, err = utils.GenerateAccessToken(user.ID, session.ID, user.TokenVersion)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	return accessToken, newRefreshToken, nil
 }
 
 func (s *Service) Logout(ctx context.Context, user *models.User, sessionID string) error {
-	s.logger.Log(ctx, models.AdminAuthLogger, nil, &user.ID, models.UserLogout, fmt.Sprintf("IP: %s", user.LastIP))
+	s.logger.Log(ctx, enums.AdminAuthLogger, nil, &user.ID, enums.UserLogout, fmt.Sprintf("IP: %s", user.LastIP))
 
-	return s.repository.RevokeSession(ctx, sessionID)
+	if err := s.repository.RevokeSession(ctx, s.repository.DB, sessionID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Service) ParseJWT(tokenString string) (*models.User, *utils.Claims, error) {

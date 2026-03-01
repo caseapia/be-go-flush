@@ -3,69 +3,14 @@ package models
 import (
 	"time"
 
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/uptrace/bun"
-)
-
-type LoggerType string
-type Action string
-
-const (
-	StaffCommonLogger     = "staffCommon"
-	StaffPunishmentLogger = "staffPunish"
-	AdminTicketLogger     = "adminTickets"
-	AdminAuthLogger       = "adminAuth"
-)
-
-const (
-	// ! Punishments
-	Ban   Action = "has banned"
-	Unban Action = "has unbanned"
-
-	// ! Common actions
-	CreateRank             Action = "has created rank"
-	SearchByUsername       Action = "searched by username"
-	SearchByUserID         Action = "searched by user ID"
-	SearchLogs             Action = "searched logs"
-	SetStaffRank           Action = "has set admin rank"
-	SetDeveloperRank       Action = "has set developer rank"
-	RestoreUser            Action = "has restored"
-	Create                 Action = "has created user"
-	ChangeFlags            Action = "has changed flags"
-	DeleteRank             Action = "has delete rank"
-	SoftDelete             Action = "has soft-deleted"
-	HardDelete             Action = "has hard-deleted"
-	TriedToDeleteManager   Action = "has tried to delete manager's account and action has stopped"
-	CreateInvite           Action = "has created invite code"
-	DeleteInvite           Action = "has deleted invite code"
-	ChangeUserData         Action = "has changed user's data"
-	ChangeUserPassword     Action = "has changed user's password"
-	ResetUserSensetiveData Action = "has reset user IPs and last seen info"
-	EditRank               Action = "has edited rank"
-	LookupNotifications    Action = "lookup user notifications"
-	SendNotification       Action = "send notify"
-	DeleteNotification     Action = "has deleted notification"
-	AssignedToTicket       Action = "has assigned to the ticket"
-	UnassignFromTicket     Action = "has unassign himself from ticket"
-	CloseTicket            Action = "has closed ticket"
-	ChangeTicketCategory   Action = "has changed ticket category"
-	DeleteTicket           Action = "has deleted a ticket"
-	RevealSensetiveData    Action = "revealed sensetive data"
-	UserRegister           Action = "just registered"
-	UserLogin              Action = "just log in"
-	UserLogout             Action = "just log out"
-	CreateBadge            Action = "created a badge"
-	EditBadge              Action = "edited a badge"
-	DeleteBadge            Action = "deleted a badge"
-	AwardUser              Action = "has awarded"
-	LinkDiscord            Action = "linked his discord"
-	UnlinkDiscord          Action = "unlinked his discord"
-	ForceUnlinkUserDiscord Action = "force unlinked discord"
 )
 
 type BaseLog struct {
 	ID             uint64    `bun:"id,pk,autoincrement" json:"id"`
 	Date           time.Time `bun:"date,notnull" json:"date"`
-	Action         Action    `bun:"action,notnull" json:"action"`
+	Action         string    `bun:"action,notnull" json:"action"`
 	AdditionalInfo *string   `bun:"additional_information" json:"additionalInfo,omitempty"`
 }
 
@@ -110,10 +55,10 @@ type AuthLog struct {
 }
 
 type LogPopulate struct {
-	StartDate string     `json:"dateStart"`
-	EndDate   string     `json:"dateEnd"`
-	Type      LoggerType `json:"type"`
-	Keywords  *string    `json:"keywords"`
+	StartDate string           `json:"dateStart"`
+	EndDate   string           `json:"dateEnd"`
+	Type      enums.LoggerType `json:"type"`
+	Keywords  *string          `json:"keywords"`
 }
 
 type LogUser struct {

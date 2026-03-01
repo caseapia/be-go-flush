@@ -4,10 +4,11 @@ import (
 	"context"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/uptrace/bun"
 )
 
-func (r *Repository) CreateBadge(ctx context.Context, entry *models.BadgeAdminInformation) (*models.BadgeAdminInformation, error) {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateBadge(ctx context.Context, tx bun.IDB, entry *models.BadgeAdminResponse) (*models.BadgeAdminResponse, error) {
+	_, err := tx.NewInsert().
 		Model(entry).
 		Exec(ctx)
 	if err != nil {
@@ -17,10 +18,10 @@ func (r *Repository) CreateBadge(ctx context.Context, entry *models.BadgeAdminIn
 	return entry, nil
 }
 
-func (r *Repository) PopulateAllBadges(ctx context.Context) (*[]models.BadgeAdminInformation, error) {
-	var badges []models.BadgeAdminInformation
+func (r *Repository) PopulateAllBadges(ctx context.Context) (*[]models.BadgeAdminResponse, error) {
+	var badges []models.BadgeAdminResponse
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&badges).
 		Relation("Admin").
 		Scan(ctx)
@@ -29,16 +30,16 @@ func (r *Repository) PopulateAllBadges(ctx context.Context) (*[]models.BadgeAdmi
 	}
 
 	if badges == nil {
-		badges = make([]models.BadgeAdminInformation, 0)
+		badges = make([]models.BadgeAdminResponse, 0)
 	}
 
 	return &badges, nil
 }
 
-func (r *Repository) SearchBadgeByID(ctx context.Context, badgeID uint64) (*models.BadgeAdminInformation, error) {
-	b := new(models.BadgeAdminInformation)
+func (r *Repository) SearchBadgeByID(ctx context.Context, badgeID uint64) (*models.BadgeAdminResponse, error) {
+	b := new(models.BadgeAdminResponse)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(b).
 		Where("?TableAlias.id = ?", badgeID).
 		Relation("Admin").
@@ -50,8 +51,8 @@ func (r *Repository) SearchBadgeByID(ctx context.Context, badgeID uint64) (*mode
 	return b, nil
 }
 
-func (r *Repository) EditBadge(ctx context.Context, badgeID uint64, newEntry *models.BadgeAdminInformation) (*models.BadgeAdminInformation, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) EditBadge(ctx context.Context, tx bun.IDB, badgeID uint64, newEntry *models.BadgeAdminResponse) (*models.BadgeAdminResponse, error) {
+	_, err := tx.NewUpdate().
 		Model(newEntry).
 		Where("id = ?", badgeID).
 		Exec(ctx)
@@ -62,8 +63,8 @@ func (r *Repository) EditBadge(ctx context.Context, badgeID uint64, newEntry *mo
 	return newEntry, nil
 }
 
-func (r *Repository) DeleteBadge(ctx context.Context, badgeID uint64) (bool, error) {
-	_, err := r.db.NewDelete().
+func (r *Repository) DeleteBadge(ctx context.Context, tx bun.IDB, badgeID uint64) (bool, error) {
+	_, err := tx.NewDelete().
 		Model((*models.Badge)(nil)).
 		Where("?TableAlias.id = ?", badgeID).
 		Exec(ctx)

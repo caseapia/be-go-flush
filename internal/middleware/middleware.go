@@ -30,7 +30,7 @@ func LoadRank(rankSrv *ranks.Service) fiber.Handler {
 			return devRankErr
 		}
 
-		c.Locals("rank", []*models.RankStructure{adminRank, developerRank})
+		c.Locals("rank", []*models.Rank{adminRank, developerRank})
 
 		return c.Next()
 	}
@@ -41,7 +41,7 @@ func RequireFlag(flags ...string) fiber.Handler {
 		val := c.Locals("rank")
 		userVal := c.Locals("user")
 
-		ranks, ok := val.([]*models.RankStructure)
+		ranks, ok := val.([]*models.Rank)
 		if !ok || len(ranks) == 0 {
 			return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 		}
@@ -83,7 +83,7 @@ func UpdateLastLogin(repo *mysql.Repository) fiber.Handler {
 		user := c.Locals("user")
 		if user != nil {
 			if u, ok := user.(*models.User); ok && u != nil {
-				if updateErr := repo.UpdateLastLogin(c, u.ID); updateErr != nil {
+				if updateErr := repo.UpdateLastLogin(c, repo.DB, u.ID); updateErr != nil {
 					slog.WithData(slog.M{
 						"userID": u.ID,
 						"error":  updateErr,

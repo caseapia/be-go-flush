@@ -3,9 +3,9 @@ package tickets
 import (
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/user/tickets"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -29,7 +29,7 @@ func (h *Handler) SearchTickets(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(tickets)
+	return utils.Success(ctx, 200, tickets)
 }
 
 func (h *Handler) PopulateTicket(c *fiber.Ctx) error {
@@ -41,12 +41,12 @@ func (h *Handler) PopulateTicket(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	ticket, err := h.service.PopulateTicket(c.UserContext(), uint64(id), u)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.PopulateTicket(c.UserContext(), uint64(id), u)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return c.Status(fiber.StatusOK).JSON(ticket)
+	return utils.Success(c, 200, ticket)
 }
 
 func (h *Handler) PopulateAllUserTickets(ctx *fiber.Ctx) error {
@@ -61,7 +61,7 @@ func (h *Handler) PopulateAllUserTickets(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(tickets)
+	return utils.Success(ctx, 200, tickets)
 }
 
 func (h *Handler) CreateTicket(ctx *fiber.Ctx) error {
@@ -72,16 +72,16 @@ func (h *Handler) CreateTicket(ctx *fiber.Ctx) error {
 	}
 
 	var input models.TicketCreationInput
-	if err := ctx.BodyParser(&input); err != nil {
-		return err
+	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
+		return ticketErr
 	}
 
-	ticket, err := h.service.CreateTicket(ctx.UserContext(), *u, input.Title, input.Category, input.FirstMessage)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.CreateTicket(ctx.UserContext(), *u, input.Title, input.Category, input.FirstMessage)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(ticket)
+	return utils.Success(ctx, 201, ticket)
 }
 
 func (h *Handler) CreateTicketMessage(ctx *fiber.Ctx) error {
@@ -92,33 +92,16 @@ func (h *Handler) CreateTicketMessage(ctx *fiber.Ctx) error {
 	}
 
 	var input models.TicketMessageCreationInput
-	if err := ctx.BodyParser(&input); err != nil {
-		return err
+	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
+		return ticketErr
 	}
 
-	messages, err := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, u, input.Content)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, u, input.Content)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(messages)
-}
-
-func (h *Handler) PopulateTicketMessages(ctx *fiber.Ctx) error {
-	id, _ := strconv.Atoi(ctx.Params("id"))
-
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
-
-	messages, err := h.service.PopulateTicketMessages(ctx.UserContext(), uint64(id), u)
-	if err != nil {
-		return err
-	}
-
-	return ctx.Status(fiber.StatusOK).JSON(messages)
+	return utils.Success(ctx, 201, ticket)
 }
 
 func (h *Handler) TicketAssignment(ctx *fiber.Ctx) error {
@@ -130,12 +113,12 @@ func (h *Handler) TicketAssignment(ctx *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	ticket, err := h.service.TicketAssignment(ctx.UserContext(), uint64(id), u)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.TicketAssignment(ctx.UserContext(), uint64(id), u)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(ticket)
+	return utils.Success(ctx, 200, ticket)
 }
 
 func (h *Handler) CloseTicket(ctx *fiber.Ctx) error {
@@ -147,12 +130,12 @@ func (h *Handler) CloseTicket(ctx *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	ticket, err := h.service.CloseTicket(ctx.UserContext(), uint64(id), *u)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.CloseTicket(ctx.UserContext(), uint64(id), *u)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(ticket)
+	return utils.Success(ctx, 200, ticket)
 }
 
 func (h *Handler) ChangeCategory(ctx *fiber.Ctx) error {
@@ -165,29 +148,14 @@ func (h *Handler) ChangeCategory(ctx *fiber.Ctx) error {
 	}
 
 	var input models.TicketCategoryChangingInput
-	if err := ctx.BodyParser(&input); err != nil {
-		return err
+	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
+		return ticketErr
 	}
 
-	ticket, err := h.service.ChangeTicketCategory(ctx.UserContext(), uint64(id), input.NewCategory, u)
-	if err != nil {
-		return err
+	ticket, ticketErr := h.service.ChangeTicketCategory(ctx.UserContext(), uint64(id), input.NewCategory, u)
+	if ticketErr != nil {
+		return ticketErr
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(ticket)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/tickets")
-	groupAdmin := router.Group("/admin/tickets")
-
-	group.Post("/create", h.CreateTicket)                                                     // Create ticket
-	group.Get("/populate/:id", h.PopulateTicket)                                              // Populate one ticket
-	group.Get("/mytickets", h.PopulateAllUserTickets)                                         // Populate all tickets created by selected user
-	group.Get("/populate/messages/:id", h.PopulateTicketMessages)                             // Populate ticket messages
-	group.Post("/send", h.CreateTicketMessage)                                                // Create message in a ticket
-	group.Patch("/close/:id", h.CloseTicket)                                                  // Close ticket
-	groupAdmin.Get("/populate", middleware.RequireFlag("STAFF"), h.SearchTickets)             // ~ Populate all tickets existed in database
-	groupAdmin.Post("/assign/:id", middleware.RequireFlag("STAFF"), h.TicketAssignment)       // ~ Assign an admin to the ticket
-	groupAdmin.Patch("/edit/category/:id", middleware.RequireFlag("STAFF"), h.ChangeCategory) // ~ Change category of ticket
+	return utils.Success(ctx, 200, ticket)
 }

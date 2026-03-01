@@ -4,13 +4,15 @@ import (
 	"context"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gookit/slog"
+	"github.com/uptrace/bun"
 )
 
 func (r *Repository) SearchOpenedTickets(ctx context.Context) ([]models.Ticket, int, error) {
 	var tickets []models.Ticket
 
-	query := r.db.NewSelect().
+	query := r.DB.NewSelect().
 		Model(&tickets).
 		Where("status != ?", "closed").
 		Order("created_at ASC").
@@ -29,7 +31,7 @@ func (r *Repository) SearchOpenedTickets(ctx context.Context) ([]models.Ticket, 
 func (r *Repository) SearchAllTickets(ctx context.Context) ([]models.Ticket, int, error) {
 	var tickets []models.Ticket
 
-	query := r.db.NewSelect().
+	query := r.DB.NewSelect().
 		Model(&tickets).
 		Order("created_at ASC").
 		Relation("Author").
@@ -48,7 +50,7 @@ func (r *Repository) SearchTicketByID(ctx context.Context, ticketID uint64) (*mo
 	var ticket models.Ticket
 	var messages []models.TicketMessage
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&ticket).
 		Where("ticket.id = ?", ticketID).
 		Relation("Author").
@@ -58,7 +60,7 @@ func (r *Repository) SearchTicketByID(ctx context.Context, ticketID uint64) (*mo
 		return nil, nil, err
 	}
 
-	err = r.db.NewSelect().
+	err = r.DB.NewSelect().
 		Model(&messages).
 		Where("ticket_id = ?", ticketID).
 		Relation("Author").
@@ -77,7 +79,7 @@ func (r *Repository) SearchTicketByID(ctx context.Context, ticketID uint64) (*mo
 func (r *Repository) PopulateTicket(ctx context.Context, ticketID uint64) (*models.Ticket, error) {
 	t := new(models.Ticket)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(t).
 		Relation("Author").
 		Relation("Handler").
@@ -88,8 +90,8 @@ func (r *Repository) PopulateTicket(ctx context.Context, ticketID uint64) (*mode
 	return t, err
 }
 
-func (r *Repository) TicketAssignment(ctx context.Context, ticketID uint64, userID uint64) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) TicketAssignment(ctx context.Context, tx bun.IDB, ticketID uint64, userID uint64) error {
+	_, err := tx.NewUpdate().
 		Model((*models.Ticket)(nil)).
 		Set("handling_by = ?", userID).
 		Where("id = ?", ticketID).
@@ -101,8 +103,8 @@ func (r *Repository) TicketAssignment(ctx context.Context, ticketID uint64, user
 	return nil
 }
 
-func (r *Repository) TicketUnassignment(ctx context.Context, ticketID uint64) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) TicketUnassignment(ctx context.Context, tx bun.IDB, ticketID uint64) error {
+	_, err := tx.NewUpdate().
 		Model((*models.Ticket)(nil)).
 		Set("handling_by = ?", nil).
 		Where("id = ?", ticketID).
@@ -117,7 +119,7 @@ func (r *Repository) TicketUnassignment(ctx context.Context, ticketID uint64) er
 func (r *Repository) PopulateAllUserTickets(ctx context.Context, userID uint64) ([]models.Ticket, error) {
 	var tickets []models.Ticket
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&tickets).
 		Relation("Author").
 		Relation("Handler").
@@ -134,8 +136,8 @@ func (r *Repository) PopulateAllUserTickets(ctx context.Context, userID uint64) 
 	return tickets, nil
 }
 
-func (r *Repository) CreateTicket(ctx context.Context, entry models.Ticket) (*models.Ticket, error) {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateTicket(ctx context.Context, tx bun.IDB, entry models.Ticket) (*models.Ticket, error) {
+	_, err := tx.NewInsert().
 		Model(&entry).
 		Exec(ctx)
 	if err != nil {
@@ -147,10 +149,10 @@ func (r *Repository) CreateTicket(ctx context.Context, entry models.Ticket) (*mo
 	return &entry, nil
 }
 
-func (r *Repository) SetTicketStatus(ctx context.Context, ticketID uint64, newStatus models.TicketStatus) (*models.Ticket, error) {
+func (r *Repository) SetTicketStatus(ctx context.Context, tx bun.IDB, ticketID uint64, newStatus enums.TicketStatus) (*models.Ticket, error) {
 	t := new(models.Ticket)
 
-	_, err := r.db.NewUpdate().
+	_, err := tx.NewUpdate().
 		Model(t).
 		Set("status = ?", newStatus).
 		Where("id = ?", ticketID).
@@ -165,9 +167,10 @@ func (r *Repository) SetTicketStatus(ctx context.Context, ticketID uint64, newSt
 func (r *Repository) PopulateTicketMessages(ctx context.Context, ticketID uint64) ([]models.TicketMessage, error) {
 	var messages []models.TicketMessage
 
-	query := r.db.NewSelect().
+	query := r.DB.NewSelect().
 		Model(&messages).
-		Relation("Author").
+		Relation("Author.Staff").
+		Relation("Author.Developer").
 		Where("ticket_id = ?", ticketID)
 
 	err := query.Scan(ctx)
@@ -182,45 +185,45 @@ func (r *Repository) PopulateTicketMessages(ctx context.Context, ticketID uint64
 	return messages, err
 }
 
-func (r *Repository) CreateTicketMessage(ctx context.Context, entry models.TicketMessage, handlerID *uint64) ([]models.TicketMessage, error) {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateTicketMessage(ctx context.Context, tx bun.IDB, entry models.TicketMessage, handlerID *uint64) error {
+	_, err := tx.NewInsert().
 		Model(&entry).
 		Returning("*").
 		Exec(ctx)
 	if err != nil {
 		slog.WithData(slog.M{"error": err, "entry": entry}).Error("failed to send message in ticket")
 
-		return nil, err
+		return err
 	}
 
-	var newStatus models.TicketStatus
+	var newStatus enums.TicketStatus
 	if handlerID != nil && entry.AuthorID == *handlerID {
-		newStatus = models.Open
+		newStatus = enums.TicketStatusOpen
 	} else {
-		newStatus = models.Pending
+		newStatus = enums.TicketStatusPending
 	}
 
-	_, statusErr := r.SetTicketStatus(ctx, entry.TicketID, newStatus)
+	_, statusErr := r.SetTicketStatus(ctx, tx, uint64(entry.TicketID), newStatus)
 	if statusErr != nil {
-		return nil, statusErr
+		return statusErr
 	}
 
 	messages, err := r.PopulateTicketMessages(ctx, entry.TicketID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if messages == nil {
 		messages = make([]models.TicketMessage, 0)
 	}
 
-	return messages, nil
+	return nil
 }
 
-func (r *Repository) CloseTicket(ctx context.Context, ticketID uint64) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) CloseTicket(ctx context.Context, tx bun.IDB, ticketID uint64) error {
+	_, err := tx.NewUpdate().
 		Model((*models.Ticket)(nil)).
-		Set("status = ?", models.Closed).
+		Set("status = ?", enums.TicketStatusClosed).
 		Where("id = ?", ticketID).
 		Exec(ctx)
 
@@ -230,8 +233,8 @@ func (r *Repository) CloseTicket(ctx context.Context, ticketID uint64) error {
 	return nil
 }
 
-func (r *Repository) ChangeTicketCategory(ctx context.Context, ticketID uint64, newCategory string) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) ChangeTicketCategory(ctx context.Context, tx bun.IDB, ticketID uint64, newCategory string) error {
+	_, err := r.DB.NewUpdate().
 		Model((*models.Ticket)(nil)).
 		Set("category = ?", newCategory).
 		Where("id = ?", ticketID).
@@ -243,8 +246,8 @@ func (r *Repository) ChangeTicketCategory(ctx context.Context, ticketID uint64, 
 	return nil
 }
 
-func (r *Repository) DeleteTicket(ctx context.Context, ticketID uint64) error {
-	_, err := r.db.NewDelete().
+func (r *Repository) DeleteTicket(ctx context.Context, tx bun.IDB, ticketID uint64) error {
+	_, err := tx.NewDelete().
 		Model((*models.Ticket)(nil)).
 		Where("id = ?", ticketID).
 		Exec(ctx)
@@ -253,4 +256,40 @@ func (r *Repository) DeleteTicket(ctx context.Context, ticketID uint64) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) PopulateTicketActions(ctx context.Context, ticketID uint64) ([]models.TicketAction, error) {
+	var actions []models.TicketAction
+
+	err := r.DB.NewSelect().
+		Model(&actions).
+		Where("ticket_id = ?", ticketID).
+		Relation("Author.Staff").
+		Relation("Author.Developer").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if actions == nil {
+		actions = make([]models.TicketAction, 0)
+	}
+
+	return actions, nil
+}
+
+func (r *Repository) CreateTicketAction(ctx context.Context, tx bun.IDB, entry models.TicketAction) ([]models.TicketAction, error) {
+	_, err := tx.NewInsert().
+		Model(&entry).
+		Exec(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	actions, err := r.PopulateTicketActions(ctx, entry.TicketID)
+	if err != nil {
+		return nil, err
+	}
+
+	return actions, nil
 }

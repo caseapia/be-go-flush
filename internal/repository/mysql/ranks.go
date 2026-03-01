@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/uptrace/bun"
 )
 
-func (r *Repository) SearchAllRanks(ctx context.Context) ([]models.RankStructure, error) {
-	var ranks []models.RankStructure
-	err := r.db.NewSelect().
+func (r *Repository) SearchAllRanks(ctx context.Context) ([]models.Rank, error) {
+	var ranks []models.Rank
+	err := r.DB.NewSelect().
 		Model(&ranks).
 		Relation("Users").
 		Relation("Developers").
@@ -16,15 +17,15 @@ func (r *Repository) SearchAllRanks(ctx context.Context) ([]models.RankStructure
 		Scan(ctx)
 
 	if ranks == nil {
-		ranks = make([]models.RankStructure, 0)
+		ranks = make([]models.Rank, 0)
 	}
 
 	return ranks, err
 }
 
-func (r *Repository) SearchRankByID(ctx context.Context, id int) (*models.RankStructure, error) {
-	rank := new(models.RankStructure)
-	err := r.db.NewSelect().
+func (r *Repository) SearchRankByID(ctx context.Context, id int) (*models.Rank, error) {
+	rank := new(models.Rank)
+	err := r.DB.NewSelect().
 		Model(rank).
 		Relation("Users").
 		Relation("Developers").
@@ -37,9 +38,9 @@ func (r *Repository) SearchRankByID(ctx context.Context, id int) (*models.RankSt
 	return rank, nil
 }
 
-func (r *Repository) SearchRankByName(ctx context.Context, rankName string) (*models.RankStructure, error) {
-	rank := new(models.RankStructure)
-	err := r.db.NewSelect().
+func (r *Repository) SearchRankByName(ctx context.Context, rankName string) (*models.Rank, error) {
+	rank := new(models.Rank)
+	err := r.DB.NewSelect().
 		Model(rank).
 		Relation("Users").
 		Relation("Developers").
@@ -53,24 +54,24 @@ func (r *Repository) SearchRankByName(ctx context.Context, rankName string) (*mo
 	return rank, nil
 }
 
-func (r *Repository) CreateRank(ctx context.Context, rank *models.RankStructure) error {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateRank(ctx context.Context, tx bun.IDB, rank *models.Rank) error {
+	_, err := tx.NewInsert().
 		Model(rank).
 		Exec(ctx)
 
 	return err
 }
 
-func (r *Repository) DeleteRank(ctx context.Context, rank *models.RankStructure) error {
-	_, err := r.db.NewDelete().
+func (r *Repository) DeleteRank(ctx context.Context, tx bun.IDB, rank *models.Rank) error {
+	_, err := tx.NewDelete().
 		Model(rank).
 		WherePK().
 		Exec(ctx)
 	return err
 }
 
-func (r *Repository) EditRank(ctx context.Context, rank *models.RankStructure) (*models.RankStructure, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) EditRank(ctx context.Context, tx bun.IDB, rank *models.Rank) (*models.Rank, error) {
+	_, err := tx.NewUpdate().
 		Model(rank).
 		Column("name", "color", "flags").
 		WherePK().

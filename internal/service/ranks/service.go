@@ -2,42 +2,29 @@ package ranks
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/internal/repository/mysql"
+	"github.com/caseapia/goproject-flush/internal/service/logger"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 )
 
-type Logger interface {
-	Log(ctx context.Context, loggerType models.LoggerType, adminID *uint64, userID *uint64, action interface{}, additional ...string)
-}
-
-type Repository interface {
-	SearchUserByID(ctx context.Context, id uint64) (*models.User, error)
-	SearchAllRanks(ctx context.Context) ([]models.RankStructure, error)
-	SearchRankByID(ctx context.Context, id int) (*models.RankStructure, error)
-	SearchRankByName(ctx context.Context, rankName string) (*models.RankStructure, error)
-	CreateRank(ctx context.Context, rank *models.RankStructure) error
-	DeleteRank(ctx context.Context, rank *models.RankStructure) error
-	EditRank(ctx context.Context, rank *models.RankStructure) (*models.RankStructure, error)
-}
-
 type Service struct {
-	repo   Repository
-	logger Logger
+	repo   mysql.Repository
+	logger logger.Service
 }
 
-func NewService(r Repository, l Logger) *Service {
+func NewService(r mysql.Repository, l logger.Service) *Service {
 	return &Service{
 		repo:   r,
 		logger: l,
 	}
 }
 
-func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, rankColor string, rankFlags []string) (*models.RankStructure, error) {
+func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, rankColor string, rankFlags []string) (*models.Rank, error) {
 	u, err := s.repo.SearchUserByID(ctx.UserContext(), adminID)
 	if err != nil {
 		return nil, err
@@ -49,30 +36,26 @@ func (s *Service) CreateRank(ctx *fiber.Ctx, adminID uint64, rankName string, ra
 	}
 
 	if !r.HasFlag("STAFFMANAGEMENT") {
-		return nil, &fiber.Error{Code: 403, Message: "you're not allowed to use this function"}
+		return nil, fiber.NewError(fiber.StatusForbidden, "you're not allowed to use this function")
 	}
 
 	existing, err := s.repo.SearchRankByName(ctx.UserContext(), rankName)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
 	if existing != nil {
-		return nil, &fiber.Error{Code: 409, Message: "rank with that name already exists"}
+		return nil, fiber.NewError(fiber.StatusConflict, "rank with that name already exists")
 	}
 
 	if rankName == "" || len(rankName) < 3 || len(rankName) > 30 {
 		return nil, &fiber.Error{Code: 400, Message: "invalid length of rank name"}
 	}
 
-	rank := &models.RankStructure{Name: rankName, Color: rankColor, Flags: rankFlags}
+	rank := &models.Rank{Name: rankName, Color: rankColor, Flags: rankFlags}
 
-	if err := s.repo.CreateRank(ctx.UserContext(), rank); err != nil {
+	if err := s.repo.CreateRank(ctx.UserContext(), s.repo.DB, rank); err != nil {
 		return nil, err
 	}
 
 	addInfo := "with name: " + rankName + ", with color: " + rankColor + "with flags: " + strings.Join(rankFlags, ", ")
-
-	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &adminID, nil, models.CreateRank, addInfo)
+	s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &adminID, nil, enums.CreateRank, addInfo)
 
 	return rank, nil
 }
@@ -88,7 +71,7 @@ func (s *Service) DeleteRank(ctx *fiber.Ctx, adminID uint64, id int) (bool, erro
 	}
 
 	if !uRank.HasFlag("STAFFMANAGEMENT") {
-		return false, &fiber.Error{Code: 403, Message: "you're not allowed to use this function"}
+		return false, fiber.NewError(fiber.StatusForbidden, "you're not allowed to use this function")
 	}
 
 	r, err := s.repo.SearchRankByID(ctx.UserContext(), id)
@@ -96,39 +79,38 @@ func (s *Service) DeleteRank(ctx *fiber.Ctx, adminID uint64, id int) (bool, erro
 		return false, err
 	}
 	if r == nil {
-		return false, &fiber.Error{Code: 404, Message: "rank with that name not found"}
+		return false, fiber.NewError(fiber.StatusNotFound, "rank with that name not found")
 	}
 
-	if err := s.repo.DeleteRank(ctx.UserContext(), r); err != nil {
+	if err := s.repo.DeleteRank(ctx.UserContext(), s.repo.DB, r); err != nil {
 		return false, err
 	}
 
 	addInfo := fmt.Sprintf("with ID: %d, with name: %s", r.ID, r.Name)
-
-	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &adminID, nil, models.DeleteRank, addInfo)
+	s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &adminID, nil, enums.DeleteRank, addInfo)
 
 	return true, nil
 }
 
-func (s *Service) SearchAllRanks(ctx *fiber.Ctx) ([]models.RankStructure, error) {
+func (s *Service) SearchAllRanks(ctx *fiber.Ctx) ([]models.Rank, error) {
 	ranks, err := s.repo.SearchAllRanks(ctx.UserContext())
 	if err != nil {
-		return nil, err
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return ranks, nil
 }
 
-func (s *Service) SearchRankByID(ctx *fiber.Ctx, id int) (*models.RankStructure, error) {
+func (s *Service) SearchRankByID(ctx *fiber.Ctx, id int) (*models.Rank, error) {
 	rank, err := s.repo.SearchRankByID(ctx.UserContext(), id)
 	if err != nil {
-		return nil, err
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	return rank, nil
 }
 
-func (s *Service) EditRank(ctx context.Context, sender uint64, rank *models.RankStructure) (*models.RankStructure, error) {
+func (s *Service) EditRank(ctx context.Context, sender uint64, rank *models.Rank) (*models.Rank, error) {
 	oldRank, err := s.repo.SearchRankByID(ctx, int(rank.ID))
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusNotFound, "rank not found")
@@ -137,16 +119,24 @@ func (s *Service) EditRank(ctx context.Context, sender uint64, rank *models.Rank
 	oldFlags := strings.Join(oldRank.Flags, ", ")
 	oldInfo := fmt.Sprintf("Name: %s, Color: %s, Flags: %v", oldRank.Name, oldRank.Color, oldFlags)
 
-	updatedRank, err := s.repo.EditRank(ctx, rank)
+	searchedRank, err := s.repo.SearchRankByName(ctx, rank.Name)
 	if err != nil {
-		return nil, &fiber.Error{Code: 500, Message: err.Error()}
+		return nil, err
+	}
+	if searchedRank != nil {
+		return nil, fiber.NewError(fiber.StatusConflict, "rank with that name already exists")
+	}
+
+	updatedRank, err := s.repo.EditRank(ctx, s.repo.DB, rank)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	newFlags := strings.Join(updatedRank.Flags, ", ")
 	newInfo := fmt.Sprintf("Name: %s, Color: %s, Flags: %v", updatedRank.Name, updatedRank.Color, newFlags)
 
 	addInfo := "Before: " + oldInfo + "\nAfter: " + newInfo
-	s.logger.Log(ctx, models.StaffCommonLogger, &sender, nil, models.EditRank, addInfo)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &sender, nil, enums.EditRank, addInfo)
 
 	return updatedRank, nil
 }

@@ -3,9 +3,9 @@ package ranks
 import (
 	"strings"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -28,7 +28,7 @@ func (r *Handler) GetRanksList(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
-	return c.JSON(ranks)
+	return utils.Success(c, 200, ranks)
 }
 
 func (r *Handler) CreateRank(c *fiber.Ctx) error {
@@ -38,7 +38,7 @@ func (r *Handler) CreateRank(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	var input models.CreateRankBody
+	var input models.CreateRankRequest
 
 	if err := c.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: err.Error()}
@@ -54,7 +54,7 @@ func (r *Handler) CreateRank(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 400, Message: err.Error()}
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(rank)
+	return utils.Success(c, 201, rank)
 }
 
 func (r *Handler) DeleteRank(c *fiber.Ctx) error {
@@ -74,7 +74,7 @@ func (r *Handler) DeleteRank(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(IsSuccess)
+	return utils.Success(c, 200, IsSuccess)
 }
 
 func (h *Handler) EditRank(c *fiber.Ctx) error {
@@ -89,7 +89,7 @@ func (h *Handler) EditRank(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	var input models.RankStructure
+	var input models.Rank
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
@@ -101,14 +101,5 @@ func (h *Handler) EditRank(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(r)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/admin/ranks")
-
-	group.Get("/", h.GetRanksList)
-	group.Post("/create", middleware.RequireFlag("STAFFMANAGEMENT"), h.CreateRank)
-	group.Delete("/delete/:id", middleware.RequireFlag("MANAGER"), h.DeleteRank)
-	group.Patch("/edit/:id", middleware.RequireFlag("MANAGER"), h.EditRank)
+	return utils.Success(c, 200, r)
 }

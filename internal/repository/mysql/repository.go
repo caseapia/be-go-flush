@@ -5,28 +5,26 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/caseapia/goproject-flush/internal/models" // Проверьте правильность пути импорта
+	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gookit/slog"
 	"github.com/uptrace/bun"
 )
 
 type Repository struct {
-	db *bun.DB
+	DB *bun.DB
 }
 
 var MainModels = []interface{}{
 	(*models.User)(nil),
 	(*models.Badge)(nil),
 	(*models.Invite)(nil),
-	(*models.RankStructure)(nil),
+	(*models.Rank)(nil),
 	(*models.Session)(nil),
 	(*models.Ticket)(nil),
 	(*models.TicketMessage)(nil),
 }
 
 var LogModels = []interface{}{
-	(*models.Fingerprint)(nil),
-	(*models.Login)(nil),
 	(*models.CommonLog)(nil),
 	(*models.PunishmentLog)(nil),
 	(*models.TicketsLog)(nil),
@@ -70,6 +68,6 @@ func RunMigrations(db *bun.DB, tables []interface{}) error {
 
 func NewRepository(db *bun.DB) *Repository {
 	return &Repository{
-		db: db,
+		DB: db,
 	}
 }

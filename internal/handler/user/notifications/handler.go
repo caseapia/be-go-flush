@@ -3,9 +3,9 @@ package notifications
 import (
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -29,7 +29,7 @@ func (s *Handler) PopulateNotifications(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(notifications)
+	return utils.Success(c, 200, notifications)
 }
 
 func (s *Handler) ReadNotifications(c *fiber.Ctx) error {
@@ -39,9 +39,12 @@ func (s *Handler) ReadNotifications(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	notifications := s.service.ReadNotifications(c.Context(), u.ID)
+	notifications, err := s.service.ReadNotifications(c.Context(), u.ID)
+	if err != nil {
+		return err
+	}
 
-	return c.Status(fiber.StatusOK).JSON(notifications)
+	return utils.Success(c, 200, notifications)
 }
 
 func (s *Handler) ClearNotifications(c *fiber.Ctx) error {
@@ -53,7 +56,7 @@ func (s *Handler) ClearNotifications(c *fiber.Ctx) error {
 
 	notifications, _ := s.service.ClearNotifications(c.Context(), u.ID)
 
-	return c.Status(fiber.StatusOK).JSON(notifications)
+	return utils.Success(c, 200, notifications)
 }
 
 func (s *Handler) RemoveOwnNotification(c *fiber.Ctx) error {
@@ -63,7 +66,7 @@ func (s *Handler) RemoveOwnNotification(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	var input models.RemoveNotificationsInput
+	var input models.RemoveNotificationRequest
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
@@ -73,7 +76,7 @@ func (s *Handler) RemoveOwnNotification(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(isDeleted)
+	return utils.Success(c, 200, isDeleted)
 }
 
 // ! Admin actions
@@ -86,14 +89,14 @@ func (s *Handler) SendNotification(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	var input models.SendNotificationInput
+	var input models.SendNotificationRequest
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
 
 	s.service.SendNotification(c.UserContext(), uint64(id), input.Type, input.Title, input.Text, &sender.ID)
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{"status": "success"})
+	return utils.Success(c, 200, fiber.Map{"status": "success"})
 }
 
 func (s *Handler) PopulateUserNotifications(c *fiber.Ctx) error {
@@ -110,7 +113,7 @@ func (s *Handler) PopulateUserNotifications(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.Status(fiber.StatusOK).JSON(notifications)
+	return utils.Success(c, 200, notifications)
 }
 
 func (s *Handler) RemoveNotification(c *fiber.Ctx) error {
@@ -122,7 +125,7 @@ func (s *Handler) RemoveNotification(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 	}
 
-	var input models.RemoveNotificationsInput
+	var input models.RemoveNotificationRequest
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
@@ -132,18 +135,5 @@ func (s *Handler) RemoveNotification(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(isDeleted)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/notifications")
-	groupAdmin := router.Group("/admin/notifications")
-
-	group.Get("/populate", h.PopulateNotifications)
-	group.Post("/read", h.ReadNotifications)
-	group.Delete("/clear", h.ClearNotifications)
-	group.Delete("/remove", h.RemoveOwnNotification)
-	groupAdmin.Post("/send/:id", middleware.RequireFlag("ADMIN"), h.SendNotification)
-	groupAdmin.Get("/populate/:id", middleware.RequireFlag("ADMIN"), h.PopulateUserNotifications)
-	groupAdmin.Delete("/remove/:id", middleware.RequireFlag("SENIOR"), h.RemoveNotification)
+	return utils.Success(c, 200, isDeleted)
 }

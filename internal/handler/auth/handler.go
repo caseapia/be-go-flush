@@ -7,9 +7,11 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/caseapia/goproject-flush/internal/service/invite"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
+
 )
 
 type Handler struct {
@@ -22,7 +24,7 @@ func NewHandler(auth *auth.Service, invite *invite.Service) *Handler {
 }
 
 func (h *Handler) Register(c *fiber.Ctx) error {
-	var input models.RegisterBody
+	var input models.RegisterRequest
 
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
@@ -34,7 +36,7 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 	}
 
 	registeredUser, err := h.authService.Register(
-		c.Context(),
+		c,
 		input.Login,
 		input.InviteCode,
 		input.Email,
@@ -63,43 +65,31 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).SendString(err.Error())
 	}
 
-	accessToken, refreshToken, err := h.authService.Login(c.UserContext(), registeredUser.Name, registeredUser.Password, string(c.Context().UserAgent()), c.IP())
+	accessToken, refreshToken, err := h.authService.Login(c, registeredUser.Name, registeredUser.Password, string(c.Context().UserAgent()), c.IP())
 	if err != nil {
 		return err
 	}
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "auth_token",
-		Value:    accessToken,
-		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "Lax",
-	})
-
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Lax",
-	})
 
 	slog.WithData(slog.M{
 		"login": registeredUser.Name,
 		"id":    registeredUser.ID,
 	}).Debug("User successfully registered")
 
-	return c.Status(fiber.StatusCreated).JSON(registeredUser)
+	return utils.Success(c, 201, &fiber.Map{
+		"user":    registeredUser,
+		"auth":    accessToken,
+		"refresh": refreshToken,
+	})
 }
 
 func (h *Handler) Login(c *fiber.Ctx) error {
-	var input models.LoginBody
+	var input models.LoginRequest
 
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	access, refresh, err := h.authService.Login(c.Context(), input.Login, input.Password, c.Get("User-Agent"), c.IP())
+	access, refresh, err := h.authService.Login(c, input.Login, input.Password, c.Get("User-Agent"), c.IP())
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -125,7 +115,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 	})
 
-	return c.JSON(fiber.Map{
+	return utils.Success(c, 200, fiber.Map{
 		"accessToken":  access,
 		"refreshToken": refresh,
 	})
@@ -151,7 +141,7 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 		"user": user.ID,
 	}).Debug("User logouted successfully")
 
-	return c.JSON(status)
+	return utils.Success(c, 200, status)
 }
 
 func (h *Handler) Refresh(c *fiber.Ctx) error {
@@ -180,7 +170,7 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 	})
 
-	return c.JSON(fiber.Map{
+	return utils.Success(c, 200, fiber.Map{
 		"accessToken":  newAccess,
 		"refreshToken": newRefresh,
 	})
@@ -202,7 +192,7 @@ func (h *Handler) DiscordRedirect(c *fiber.Ctx) error {
 		Path:     "/",
 	})
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+	return utils.Success(c, 200, fiber.Map{
 		"url":   url,
 		"state": state,
 	})
@@ -215,21 +205,23 @@ func (h *Handler) DiscordCallback(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "invalid user context")
 	}
 
-	code := c.Query("code")
-	state := c.Query("state")
+	var input models.DiscordTokenRequest
+	if err := c.BodyParser(&input); err != nil {
+		return &fiber.Error{Code: 400, Message: "invalid request"}
+	}
 
-	if code == "" || state == "" {
+	if input.Code == "" || input.State == "" {
 		return fiber.NewError(fiber.StatusBadRequest, "missing code or state")
 	}
 
-	linkedUser, err := h.authService.LinkDiscord(c, user.ID, code, state)
+	linkedUser, err := h.authService.LinkDiscord(c, user.ID, input.Code, input.State, input.SavedState)
 	if err != nil {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Discord linked successfully",
-		"user":    linkedUser,
+	return utils.Success(c, 200, fiber.Map{
+		"status": "success",
+		"user":   linkedUser,
 	})
 }
 
@@ -245,25 +237,8 @@ func (h *Handler) DiscordUnlink(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Discord unlinked successfully",
-		"user":    unlinkedUser,
+	return utils.Success(c, 200, fiber.Map{
+		"status": "success",
+		"user":   unlinkedUser,
 	})
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/auth") // & Core route
-
-	group.Post("/refresh", h.Refresh)   // & Refresh access token
-	group.Post("/register", h.Register) // & Register account
-	group.Post("/login", h.Login)       // & Login in existing account
-}
-
-func (h *Handler) RegisterPrivateRoute(router fiber.Router) {
-	group := router.Group("/auth") // & Core route
-
-	group.Get("/discord", h.DiscordRedirect)          // & Get discord OTP Link
-	group.Get("/discord/callback", h.DiscordCallback) // & Link discord
-	group.Delete("/discord/unlink", h.DiscordUnlink)  // & Unlink discord
-	group.Delete("/logout", h.Logout)                 // & Logout
 }

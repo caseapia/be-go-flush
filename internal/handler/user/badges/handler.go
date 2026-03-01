@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/user/badges"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -30,7 +30,7 @@ func (h *Handler) PopulateAllBadges(ctx *fiber.Ctx) error {
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(badges)
+	return utils.Success(ctx, 200, badges)
 }
 
 func (h *Handler) CreateBadge(ctx *fiber.Ctx) error {
@@ -40,7 +40,7 @@ func (h *Handler) CreateBadge(ctx *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	var input models.BadgeAdminInformation
+	var input models.BadgeAdminResponse
 	if err := ctx.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: fmt.Sprintf("invalid request: %s", err.Error())}
 	}
@@ -50,7 +50,7 @@ func (h *Handler) CreateBadge(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(badge)
+	return utils.Success(ctx, 201, badge)
 }
 
 func (h *Handler) EditBadge(ctx *fiber.Ctx) error {
@@ -62,7 +62,7 @@ func (h *Handler) EditBadge(ctx *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "unauthorized"}
 	}
 
-	var input models.BadgeAdminInformation
+	var input models.BadgeAdminResponse
 	if err := ctx.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: fmt.Sprintf("invalid request: %s", err.Error())}
 	}
@@ -72,7 +72,7 @@ func (h *Handler) EditBadge(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(badge)
+	return utils.Success(ctx, 200, badge)
 }
 
 func (h *Handler) DeleteBadge(ctx *fiber.Ctx) error {
@@ -89,14 +89,5 @@ func (h *Handler) DeleteBadge(ctx *fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(isDeleted)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/admin/badges")
-
-	group.Get("/populate", middleware.RequireFlag("LEAD"), h.PopulateAllBadges) // ~ Get list of all the badges
-	group.Post("/create", middleware.RequireFlag("LEAD"), h.CreateBadge)        // ~ Create a new badge
-	group.Patch("/edit/:id", middleware.RequireFlag("LEAD"), h.EditBadge)       // ~ Edit already existed badge
-	group.Delete("/delete/:id", middleware.RequireFlag("LEAD"), h.DeleteBadge)  // ~ Delete badge
+	return utils.Success(ctx, 200, isDeleted)
 }

@@ -5,12 +5,13 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gookit/slog"
+	"github.com/uptrace/bun"
 )
 
 func (r *Repository) PopulateNotifications(ctx context.Context, userID uint64) ([]models.Notification, error) {
 	var notifications []models.Notification
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&notifications).
 		Order("created_at DESC").
 		Relation("Sender").
@@ -26,41 +27,43 @@ func (r *Repository) PopulateNotifications(ctx context.Context, userID uint64) (
 	return notifications, err
 }
 
-func (r *Repository) SendNotification(ctx context.Context, entry models.Notification) {
-	_, err := r.db.NewInsert().
+func (r *Repository) SendNotification(ctx context.Context, tx bun.IDB, entry models.Notification) error {
+	_, err := tx.NewInsert().
 		Model(&entry).
 		Exec(ctx)
 	if err != nil {
 		slog.WithData(slog.M{"error": err}).Error("failed to send notification!")
-		return
+		return err
 	}
 
 	slog.WithData(slog.M{"entryData": entry}).Debugf("notification sended successfully")
+	return nil
 }
 
-func (r *Repository) ReadNotifications(ctx context.Context, userID uint64) []models.Notification {
+func (r *Repository) ReadNotifications(ctx context.Context, tx bun.IDB, userID uint64) ([]models.Notification, error) {
 	var notifications []models.Notification
 
-	err := r.db.NewUpdate().
+	err := tx.NewUpdate().
 		Model(&notifications).
 		Set("is_readed = ?", 1).
 		Where("user_id = ?", userID).
 		Scan(ctx)
 	if err != nil {
 		slog.WithData(slog.M{"error": err}).Error("error occured when trying to mark notifications as readed")
+		return nil, err
 	}
 
 	if notifications == nil {
 		notifications = make([]models.Notification, 0)
 	}
 
-	return notifications
+	return notifications, nil
 }
 
-func (r *Repository) ClearNotifications(ctx context.Context, userID uint64) ([]models.Notification, error) {
+func (r *Repository) ClearNotifications(ctx context.Context, tx bun.IDB, userID uint64) ([]models.Notification, error) {
 	var notifications []models.Notification
 
-	_, err := r.db.NewDelete().
+	_, err := tx.NewDelete().
 		Model(&notifications).
 		Where("user_id = ?", userID).
 		Exec(ctx)
@@ -72,8 +75,8 @@ func (r *Repository) ClearNotifications(ctx context.Context, userID uint64) ([]m
 	return notifications, nil
 }
 
-func (r *Repository) RemoveNotification(ctx context.Context, userID, notifyID uint64) (bool, error) {
-	res, err := r.db.NewDelete().
+func (r *Repository) RemoveNotification(ctx context.Context, tx bun.IDB, userID, notifyID uint64) (bool, error) {
+	res, err := tx.NewDelete().
 		Model((*models.Notification)(nil)).
 		Where("user_id = ? AND id = ?", userID, notifyID).
 		Exec(ctx)

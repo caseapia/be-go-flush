@@ -6,6 +6,7 @@ import (
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gookit/slog"
 )
 
@@ -35,7 +36,7 @@ func (s *Service) GetAuthAdminLogs(ctx context.Context, startDate, endDate, keyw
 
 func (s *Service) Log(
 	ctx context.Context,
-	loggerType models.LoggerType,
+	loggerType enums.LoggerType,
 	adminID *uint64,
 	userID *uint64,
 	action interface{},
@@ -51,43 +52,73 @@ func (s *Service) Log(
 		Date:           time.Now(),
 	}
 
-	act, ok := action.(models.Action)
+	act, ok := action.(enums.LoggerAction)
 	if !ok {
 		slog.Error("invalid action type")
 		return
 	}
-	base.Action = act
+	base.Action = string(act)
 
 	switch loggerType {
-
-	case models.StaffPunishmentLogger:
-		s.repo.SaveLog(ctx, &models.PunishmentLog{
+	case enums.StaffPunishmentLogger:
+		err := s.repo.SaveLog(ctx, s.repo.DB, &models.PunishmentLog{
 			BaseLog: base,
 			AdminID: *adminID,
 			UserID:  userID,
 		})
+		if err != nil {
+			slog.WithData(slog.M{
+				"error": err,
+				"base":  base,
+				"type:": loggerType,
+			}).Error("error in log saving")
+		}
 
-	case models.StaffCommonLogger:
-		s.repo.SaveLog(ctx, &models.CommonLog{
+	case enums.StaffCommonLogger:
+		err := s.repo.SaveLog(ctx, s.repo.DB, &models.CommonLog{
 			BaseLog: base,
 			AdminID: *adminID,
 			UserID:  userID,
 		})
+		if err != nil {
+			slog.WithData(slog.M{
+				"error": err,
+				"base":  base,
+				"type:": loggerType,
+			}).Error("error in log saving")
+		}
 
-	case models.AdminTicketLogger:
-		s.repo.SaveLog(ctx, &models.TicketsLog{
+	case enums.AdminTicketLogger:
+		err := s.repo.SaveLog(ctx, s.repo.DB, &models.TicketsLog{
 			BaseLog: base,
 			AdminID: *adminID,
 			UserID:  userID,
 		})
+		if err != nil {
+			slog.WithData(slog.M{
+				"error": err,
+				"base":  base,
+				"type:": loggerType,
+			}).Error("error in log saving")
+		}
 
-	case models.AdminAuthLogger:
-		s.repo.SaveLog(ctx, &models.AuthLog{
+	case enums.AdminAuthLogger:
+		err := s.repo.SaveLog(ctx, s.repo.DB, &models.AuthLog{
 			BaseLog: base,
 			UserID:  userID,
 		})
+		if err != nil {
+			slog.WithData(slog.M{
+				"error": err,
+				"base":  base,
+				"type:": loggerType,
+			}).Error("error in log saving")
+		}
 
 	default:
-		slog.Error("unknown logger type")
+		slog.WithData(slog.M{
+			"base": base,
+			"type": loggerType,
+		}).Error("unknown logger type")
 	}
 }

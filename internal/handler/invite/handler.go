@@ -3,9 +3,9 @@ package invite
 import (
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/invite"
+	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -35,7 +35,7 @@ func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(invites)
+	return utils.Success(c, 200, invites)
 }
 
 func (h *Handler) CreateInvite(c *fiber.Ctx) error {
@@ -53,7 +53,7 @@ func (h *Handler) CreateInvite(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(newInvite)
+	return utils.Success(c, 201, newInvite)
 }
 
 func (h *Handler) DeleteInvite(c *fiber.Ctx) error {
@@ -73,13 +73,5 @@ func (h *Handler) DeleteInvite(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.JSON(true)
-}
-
-func (h *Handler) RegisterRoutes(router fiber.Router) {
-	group := router.Group("/admin/invite")
-
-	group.Get("/list", middleware.RequireFlag("ADMIN"), h.GetInviteCodes)
-	group.Post("/create", middleware.RequireFlag("ADMIN"), h.CreateInvite)
-	group.Delete("/delete/:id", middleware.RequireFlag("LEAD"), h.DeleteInvite)
+	return utils.Success(c, 200, fiber.Map{"status": "success"})
 }

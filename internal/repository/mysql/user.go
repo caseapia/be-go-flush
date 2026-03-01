@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 	"github.com/uptrace/bun"
@@ -19,7 +20,7 @@ func (r *Repository) populateUserBadges(ctx context.Context, u *models.User) err
 		return nil
 	}
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&u.Badges).
 		Where("id IN (?)", bun.In(u.BadgeIDs)).
 		Scan(ctx)
@@ -29,7 +30,7 @@ func (r *Repository) populateUserBadges(ctx context.Context, u *models.User) err
 func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.User, error) {
 	u := &models.User{ID: id}
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(u).
 		WherePK().
 		Relation("ActiveBan").
@@ -59,7 +60,7 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models.User, error) {
 	u := new(models.User)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(u).
 		Where("user.name = ?", name).
 		Relation("ActiveBan").
@@ -90,7 +91,7 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) {
 	var users []models.User
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(&users).
 		Relation("ActiveBan").
 		Relation("ActiveBan.Admin").
@@ -118,8 +119,10 @@ func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) 
 	return users, nil
 }
 
-func (r *Repository) UpdateUser(ctx context.Context, user *models.User, columns ...string) (*models.User, error) {
-	query := r.db.NewUpdate().Model(user).WherePK()
+func (r *Repository) UpdateUser(ctx context.Context, tx bun.IDB, user *models.User, columns ...string) (*models.User, error) {
+	query := tx.NewUpdate().
+		Model(user).
+		WherePK()
 
 	if len(columns) > 0 {
 		query.Column(columns...)
@@ -138,17 +141,17 @@ func (r *Repository) UpdateUser(ctx context.Context, user *models.User, columns 
 }
 
 // ! Admin actions
-func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateUser(ctx context.Context, tx bun.IDB, user *models.User) error {
+	_, err := tx.NewInsert().
 		Model(user).
 		Exec(ctx)
 	return err
 }
 
-func (r *Repository) SoftDelete(ctx context.Context, u *models.User) error {
+func (r *Repository) SoftDelete(ctx context.Context, tx bun.IDB, u *models.User) error {
 	u.Name = u.Name + "_old"
 
-	_, err := r.db.NewUpdate().
+	_, err := tx.NewUpdate().
 		Model(u).
 		Column("name").
 		WherePK().
@@ -159,7 +162,7 @@ func (r *Repository) SoftDelete(ctx context.Context, u *models.User) error {
 func (r *Repository) LookupByDiscordID(ctx context.Context, discordID string) (*models.User, error) {
 	u := new(models.User)
 
-	err := r.db.NewSelect().
+	err := r.DB.NewSelect().
 		Model(u).
 		Where("user.discord_id = ?", discordID).
 		Relation("ActiveBan").
@@ -186,8 +189,9 @@ func (r *Repository) LookupByDiscordID(ctx context.Context, discordID string) (*
 	return u, nil
 }
 
-func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateName, updateEmail, updatePassword bool) error {
+func (r *Repository) ChangeUserData(ctx context.Context, tx bun.IDB, u *models.User, updateName, updateEmail, updatePassword, updateStatus bool) error {
 	var conditions []string
+	var val interface{}
 	if updateName {
 		conditions = append(conditions, "name")
 	}
@@ -197,20 +201,26 @@ func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateN
 	if updatePassword {
 		conditions = append(conditions, "password")
 	}
+	if updateStatus {
+		conditions = append(conditions, "status")
+	}
 
 	for _, col := range conditions {
-		val := ""
-		if col == "name" {
+		switch col {
+		case "name":
 			val = u.Name
-		}
-		if col == "email" {
+		case "email":
 			val = u.Email
-		}
-		if col == "password" {
-			val = u.Password
+		case "password":
+			continue
+		case "status":
+			continue
+		default:
+			continue
+
 		}
 
-		exists, err := r.db.NewSelect().
+		exists, err := tx.NewSelect().
 			Model((*models.User)(nil)).
 			Where("? = ?", bun.Ident(col), val).
 			Where("id != ?", u.ID).
@@ -219,12 +229,12 @@ func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateN
 		if err != nil {
 			return err
 		}
-		if exists && col != "password" {
+		if exists {
 			return fiber.NewError(fiber.StatusConflict, "User with this "+col+" already exists")
 		}
 	}
 
-	query := r.db.NewUpdate().Model(u).WherePK()
+	query := tx.NewUpdate().Model(u).WherePK()
 
 	if updateName {
 		query.Column("name")
@@ -235,8 +245,11 @@ func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateN
 	if updatePassword {
 		query.Column("password")
 	}
+	if updateStatus {
+		query.Column("status")
+	}
 
-	if !updateName && !updateEmail && !updatePassword {
+	if !updateName && !updateEmail && !updatePassword && !updateStatus {
 		return nil
 	}
 
@@ -244,18 +257,18 @@ func (r *Repository) ChangeUserData(ctx context.Context, u *models.User, updateN
 	return err
 }
 
-func (r *Repository) HardDelete(ctx context.Context, id uint64) error {
-	_, err := r.db.NewDelete().
+func (r *Repository) HardDelete(ctx context.Context, tx bun.IDB, id uint64) error {
+	_, err := tx.NewDelete().
 		Model((*models.User)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
 	return err
 }
 
-func (r *Repository) Restore(ctx context.Context, user *models.User) error {
+func (r *Repository) Restore(ctx context.Context, tx bun.IDB, user *models.User) error {
 	user.Name = strings.ReplaceAll(user.Name, "_old", "")
 
-	_, err := r.db.NewUpdate().
+	_, err := tx.NewUpdate().
 		Model(user).
 		Column("name").
 		WherePK().
@@ -269,8 +282,8 @@ func (r *Repository) Restore(ctx context.Context, user *models.User) error {
 	return err
 }
 
-func (r *Repository) SetStaffRank(ctx context.Context, userID uint64, rankID int) (*models.User, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) SetStaffRank(ctx context.Context, tx bun.IDB, userID uint64, rankID int) (*models.User, error) {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("staff_rank = ?", rankID).
 		Where("id = ?", userID).
@@ -283,8 +296,8 @@ func (r *Repository) SetStaffRank(ctx context.Context, userID uint64, rankID int
 	return r.SearchUserByID(ctx, userID)
 }
 
-func (r *Repository) SetDeveloperRank(ctx context.Context, userID uint64, rankID int) (*models.User, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) SetDeveloperRank(ctx context.Context, tx bun.IDB, userID uint64, rankID int) (*models.User, error) {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("developer_rank = ?", rankID).
 		Where("id = ?", userID).
@@ -297,8 +310,8 @@ func (r *Repository) SetDeveloperRank(ctx context.Context, userID uint64, rankID
 	return r.SearchUserByID(ctx, userID)
 }
 
-func (r *Repository) EditUserFlags(ctx context.Context, userID uint64, flags []string) (*models.User, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) EditUserFlags(ctx context.Context, tx bun.IDB, userID uint64, flags []string) (*models.User, error) {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("staff_flags = ?", flags).
 		Where("id = ?", userID).
@@ -310,8 +323,8 @@ func (r *Repository) EditUserFlags(ctx context.Context, userID uint64, flags []s
 	return r.SearchUserByID(ctx, userID)
 }
 
-func (r *Repository) EditUserBadges(ctx context.Context, userID uint64, badgeIDs []uint64) (*models.User, error) {
-	_, err := r.db.NewUpdate().
+func (r *Repository) EditUserBadges(ctx context.Context, tx bun.IDB, userID uint64, badgeIDs []uint64) (*models.User, error) {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("badges = ?", badgeIDs).
 		Where("id = ?", userID).
@@ -323,8 +336,8 @@ func (r *Repository) EditUserBadges(ctx context.Context, userID uint64, badgeIDs
 	return r.SearchUserByID(ctx, userID)
 }
 
-func (r *Repository) CreateBan(ctx context.Context, ban *models.BanModel) error {
-	_, err := r.db.NewInsert().
+func (r *Repository) CreateBan(ctx context.Context, tx bun.IDB, ban *models.Ban) error {
+	_, err := tx.NewInsert().
 		Model(ban).
 		Returning("id").
 		Exec(ctx)
@@ -332,7 +345,7 @@ func (r *Repository) CreateBan(ctx context.Context, ban *models.BanModel) error 
 		return err
 	}
 
-	_, err = r.db.NewUpdate().
+	_, err = tx.NewUpdate().
 		Model(&models.User{}).
 		Set("active_ban = ?", ban.ID).
 		Where("id = ?", ban.IssuedTo).
@@ -340,10 +353,11 @@ func (r *Repository) CreateBan(ctx context.Context, ban *models.BanModel) error 
 	return err
 }
 
-func (r *Repository) DeleteBan(ctx context.Context, userID uint64) error {
-	_, err := r.db.NewDelete().
-		Model(&models.BanModel{}).
+func (r *Repository) LiftBan(ctx context.Context, tx bun.IDB, userID uint64) error {
+	_, err := tx.NewUpdate().
+		Model(&models.Ban{}).
 		Where("issued_to = ?", userID).
+		Set("status = ?", enums.BanRemoved).
 		Exec(ctx)
 	if err != nil {
 		slog.WithData(slog.M{
@@ -352,7 +366,7 @@ func (r *Repository) DeleteBan(ctx context.Context, userID uint64) error {
 		return err
 	}
 
-	_, err = r.db.NewUpdate().
+	_, err = tx.NewUpdate().
 		Table("users").
 		Set("active_ban = ?", nil).
 		Where("id = ?", userID).
@@ -367,8 +381,8 @@ func (r *Repository) DeleteBan(ctx context.Context, userID uint64) error {
 	return err
 }
 
-func (r *Repository) UpdateLastLogin(ctx *fiber.Ctx, userID uint64) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) UpdateLastLogin(ctx *fiber.Ctx, tx bun.IDB, userID uint64) error {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("last_login = ?", time.Now()).
 		Set("last_ip = ?", ctx.IP()).
@@ -378,8 +392,8 @@ func (r *Repository) UpdateLastLogin(ctx *fiber.Ctx, userID uint64) error {
 	return err
 }
 
-func (r *Repository) ResetUserSensitiveData(ctx *fiber.Ctx, userID uint64) error {
-	_, err := r.db.NewUpdate().
+func (r *Repository) ResetUserSensitiveData(ctx *fiber.Ctx, tx bun.IDB, userID uint64) error {
+	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("last_login = ?", nil).
 		Set("last_ip = ?", nil).
@@ -392,4 +406,23 @@ func (r *Repository) ResetUserSensitiveData(ctx *fiber.Ctx, userID uint64) error
 	}
 
 	return err
+}
+
+func (r *Repository) PopulateBanList(ctx context.Context) ([]models.Ban, error) {
+	var bans []models.Ban
+
+	err := r.DB.NewSelect().
+		Model(&bans).
+		Relation("Admin").
+		Relation("Target").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(bans) == 0 {
+		bans = make([]models.Ban, 0)
+	}
+
+	return bans, nil
 }

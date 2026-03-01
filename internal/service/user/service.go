@@ -11,8 +11,10 @@ import (
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
+	"github.com/uptrace/bun"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -69,31 +71,35 @@ func (s *Service) BanUser(ctx context.Context, adminID, userID uint64, unbanDate
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if user == nil || user.IsDeleted {
+	if user == nil || user.Status == enums.UserStatusDeleted {
 		slog.WithData(slog.M{
 			"error": err,
 			"user":  user,
 		}).Error("error occured")
 		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
 	}
+	if adminID == userID {
+		return nil, fiber.NewError(fiber.StatusConflict, "you cannot issue yourself a ban")
+	}
 	if user.UserHasFlag("NONBANNABLE") {
 		return nil, fiber.NewError(fiber.StatusForbidden, "ban of this user is not allowed")
 	}
 
-	ban := &models.BanModel{
+	ban := &models.Ban{
 		IssuedBy:       adminID,
 		IssuedTo:       userID,
 		Date:           time.Now(),
 		ExpirationDate: unbanDate,
 		Reason:         reason,
+		Status:         enums.BanActive,
 	}
 
-	if err := s.repo.CreateBan(ctx, ban); err != nil {
+	if err := s.repo.CreateBan(ctx, s.repo.DB, ban); err != nil {
 		return nil, err
 	}
 
 	addInfo := fmt.Sprintf("reason: %s\nuntil: %s", reason, unbanDate.String())
-	s.logger.Log(ctx, models.StaffPunishmentLogger, &adminID, &userID, models.Ban, addInfo)
+	s.logger.Log(ctx, enums.StaffPunishmentLogger, &adminID, &userID, enums.Ban, addInfo)
 
 	return user, nil
 }
@@ -103,19 +109,19 @@ func (s *Service) UnbanUser(ctx context.Context, adminID, userID uint64) (*model
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
-	if user == nil || user.IsDeleted {
+	if user == nil || user.Status == enums.UserStatusDeleted {
 		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
 	}
 
 	user.ActiveBanID = nil
 	user.ActiveBan = nil
 
-	err = s.repo.DeleteBan(ctx, userID)
+	err = s.repo.LiftBan(ctx, s.repo.DB, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	s.logger.Log(ctx, models.StaffPunishmentLogger, &adminID, &userID, models.Unban)
+	s.logger.Log(ctx, enums.StaffPunishmentLogger, &adminID, &userID, enums.Unban)
 
 	return user, nil
 }
@@ -140,16 +146,17 @@ func (s *Service) CreateUser(ctx *fiber.Ctx, adminID uint64, name, email, passwo
 	}
 
 	user := &models.User{
-		Name:     name,
-		Email:    email,
-		Password: string(hash),
+		Name:      name,
+		Email:     email,
+		Password:  string(hash),
+		CreatedAt: time.Now(),
 	}
 
-	if err := s.repo.CreateUser(ctx.UserContext(), user); err != nil {
+	if err := s.repo.CreateUser(ctx.UserContext(), s.repo.DB, user); err != nil {
 		return nil, err
 	}
 
-	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &adminID, nil, models.Create, "with nickname "+name)
+	s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &adminID, nil, enums.Create, "with nickname "+name)
 
 	return user, nil
 }
@@ -163,33 +170,36 @@ func (s *Service) DeleteUser(ctx context.Context, adminID uint64, id uint64) (*m
 	}
 
 	if r.HasFlag("MANAGER") {
-		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.TriedToDeleteManager)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.TriedToDeleteManager)
 
 		return nil, fiber.ErrForbidden
 	}
 
-	if u.IsDeleted {
-		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.HardDelete)
+	if u.Status == enums.UserStatusDeleted {
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.HardDelete)
 
-		if err := s.repo.HardDelete(ctx, id); err != nil {
+		if err := s.repo.HardDelete(ctx, s.repo.DB, id); err != nil {
 			return nil, err
 		}
 
 		return nil, nil
 	}
 
-	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.SoftDelete)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.SoftDelete)
 
-	u.IsDeleted = true
-	u.UpdatedAt = time.Now()
+	u.Status = enums.UserStatusDeleted
 
-	if err := s.repo.SoftDelete(ctx, u); err != nil {
-		return nil, err
-	}
+	s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		if err := s.repo.SoftDelete(ctx, tx, u); err != nil {
+			return err
+		}
 
-	if _, err := s.repo.UpdateUser(ctx, u); err != nil {
-		return nil, err
-	}
+		if _, err := s.repo.UpdateUser(ctx, tx, u); err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	return u, nil
 }
@@ -200,23 +210,27 @@ func (s *Service) RestoreUser(ctx context.Context, adminID uint64, id uint64) (*
 		return nil, err
 	}
 
-	if !u.IsDeleted {
+	if u.Status != enums.UserStatusDeleted {
 		return u, fiber.ErrBadRequest
 	}
 
-	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &id, models.RestoreUser)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.RestoreUser)
 
-	u.IsDeleted = false
-	u.UpdatedAt = time.Now()
+	u.Status = enums.UserStatusActive
 
-	if err := s.repo.Restore(ctx, u); err != nil {
-		return nil, err
-	}
+	var restoredUser *models.User
+	s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		if err = s.repo.Restore(ctx, tx, u); err != nil {
+			return err
+		}
 
-	restoredUser, err := s.repo.UpdateUser(ctx, u)
-	if err != nil {
-		return nil, err
-	}
+		restoredUser, err = s.repo.UpdateUser(ctx, tx, u)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
 
 	return restoredUser, nil
 }
@@ -242,15 +256,14 @@ func (s *Service) SetStaffRank(ctx context.Context, adminID uint64, userID uint6
 		return nil, fiber.NewError(fiber.StatusForbidden, "developer rank cannot be issued here")
 	}
 
-	updatedUser, err := s.repo.SetStaffRank(ctx, userID, rankID)
+	updatedUser, err := s.repo.SetStaffRank(ctx, s.repo.DB, userID, rankID)
 	if err != nil {
 		return nil, err
 	}
 
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s (%d)", oldRankName, newRank.Name, newRank.ID)
-
-	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.SetStaffRank, addInfo)
-	s.notifier.SendNotification(ctx, userID, models.Success, "You've been assigned", fmt.Sprintf("You have been assigned as staff member. Your new staff rank is %s", newRank.Name), &adminID)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.SetStaffRank, addInfo)
+	s.notifier.SendNotification(ctx, userID, enums.Success, "You've been assigned", fmt.Sprintf("You have been assigned as staff member. Your new staff rank is %s", newRank.Name), nil)
 
 	return updatedUser, nil
 }
@@ -275,26 +288,26 @@ func (s *Service) EditUserFlags(ctx context.Context, senderID uint64, userID uin
 		}
 	}
 
-	updatedUser, err := s.repo.EditUserFlags(ctx, userID, flags)
+	updatedUser, err := s.repo.EditUserFlags(ctx, s.repo.DB, userID, flags)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldFlags, strings.Join(*updatedUser.Flags, ", "))
-	s.logger.Log(ctx, models.StaffCommonLogger, &senderID, &userID, models.ChangeFlags, addInfo)
-	s.notifier.SendNotification(ctx, userID, models.Success, "Your personal flags has been updated", fmt.Sprintf("Your personal flags has been updated. Your new flags is: %s", updatedUser.Flags), &senderID)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &senderID, &userID, enums.ChangeFlags, addInfo)
+	s.notifier.SendNotification(ctx, userID, enums.Success, "Your personal flags has been updated", fmt.Sprintf("Your personal flags has been updated. Your new flags is: %s", updatedUser.Flags), nil)
 
 	return updatedUser, nil
 }
 
 func (s *Service) EditUserBadges(ctx context.Context, senderID uint64, userID uint64, badges []uint64) (*models.User, error) {
-	updatedUser, err := s.repo.EditUserBadges(ctx, userID, badges)
+	updatedUser, err := s.repo.EditUserBadges(ctx, s.repo.DB, userID, badges)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	s.notifier.SendNotification(ctx, userID, models.Success, "You've been awarded!", "You have been awarded with a new badge", &senderID)
-	s.logger.Log(ctx, models.StaffCommonLogger, &senderID, &userID, models.AwardUser)
+	s.notifier.SendNotification(ctx, userID, enums.Success, "You've been awarded!", "You have been awarded with a new badge", nil)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &senderID, &userID, enums.AwardUser)
 
 	return updatedUser, nil
 }
@@ -325,63 +338,67 @@ func (s *Service) SetDeveloperRank(ctx context.Context, adminID uint64, userId u
 		return nil, fiber.NewError(fiber.StatusForbidden, "this function is only for developer ranks")
 	}
 
-	setRank, err := s.repo.SetDeveloperRank(ctx, userId, rankID)
+	setRank, err := s.repo.SetDeveloperRank(ctx, s.repo.DB, userId, rankID)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := s.repo.UpdateUser(ctx, setRank); err != nil {
-		return nil, err
-	}
-
 	addInfo := fmt.Sprintf("Before: %s\nAfter: %s (%d)", oldRankInfo, r.Name, r.ID)
-	s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userId, models.SetDeveloperRank, addInfo)
-	s.notifier.SendNotification(ctx, userId, models.Success, "You've been assigned", fmt.Sprintf("You have been assigned as developer. Your new developer rank is %s", r.Name), &adminID)
+	s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userId, enums.SetDeveloperRank, addInfo)
+	s.notifier.SendNotification(ctx, userId, enums.Success, "You've been assigned", fmt.Sprintf("You have been assigned as developer. Your new developer rank is %s", r.Name), nil)
 
 	return setRank, nil
 }
 
-func (s *Service) ChangeUser(ctx context.Context, adminID uint64, userID uint64, name *string, email *string, password *string) (*models.User, error) {
+func (s *Service) ChangeUser(ctx context.Context, adminID uint64, userID uint64, input models.ChangeUserDataRequest) (*models.User, error) {
 	u, err := s.repo.SearchUserByID(ctx, userID)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
 	}
 
 	var hash []byte
-	if password != nil {
+	if input.Password != nil {
 		var genErr error
-		hash, genErr = bcrypt.GenerateFromPassword([]byte(*password), bcrypt.DefaultCost)
+		hash, genErr = bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
 		if genErr != nil {
 			return nil, genErr
 		}
 		u.Password = string(hash)
 	}
-	oldInfo := fmt.Sprintf("Name: %s, Email: %s", u.Name, u.Email)
+	oldInfo := fmt.Sprintf("Name: %s | Email: %s | Status: %v", u.Name, u.Email, enums.UserStatus(u.Status))
 
-	if name != nil {
-		u.Name = *name
+	if input.Name != nil {
+		u.Name = *input.Name
 	}
-	if email != nil {
-		u.Email = *email
+	if input.Email != nil {
+		u.Email = *input.Email
 	}
-	if password != nil {
+	if input.Password != nil {
 		u.Password = string(hash)
 	}
+	if input.Status != nil {
+		newStatus := enums.UserStatus(*input.Status)
+		if newStatus >= enums.UserStatusNotVerified && newStatus <= enums.UserStatusRequiresPasswordChange {
+			u.Status = newStatus
+		} else {
+			fiber.NewError(fiber.StatusBadRequest, "invalid state")
+		}
+	}
 
-	err = s.repo.ChangeUserData(ctx, u, name != nil, email != nil, hash != nil)
+	err = s.repo.ChangeUserData(ctx, s.repo.DB, u, input.Name != nil, input.Email != nil, hash != nil, input.Status != nil)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	newInfo := fmt.Sprintf("Name: %s, Email: %s", u.Name, u.Email)
+	newInfo := fmt.Sprintf("Name: %s | Email: %s | Status %v", u.Name, u.Email, enums.UserStatus(u.Status))
 
-	if password == nil {
+	if input.Password == nil {
 		addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldInfo, newInfo)
-		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.ChangeUserData, addInfo)
-		s.notifier.SendNotification(ctx, userID, models.Error, "Your credentials has been changed", "Your username or e-mail has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", &adminID)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.ChangeUserData, addInfo)
+		s.notifier.SendNotification(ctx, userID, enums.Error, "Your credentials has been changed", "Your username or e-mail has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", nil)
 	} else {
-		s.logger.Log(ctx, models.StaffCommonLogger, &adminID, &userID, models.ChangeUserPassword)
-		s.notifier.SendNotification(ctx, userID, models.Error, "Your password has been changed", "Your password has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", &adminID)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.ChangeUserPassword)
+		s.notifier.SendNotification(ctx, userID, enums.Error, "Your password has been changed", "Your password has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", nil)
 	}
 
 	return u, nil
@@ -393,12 +410,21 @@ func (s *Service) ResetUserSensitiveData(ctx *fiber.Ctx, senderID uint64, userID
 		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
 	}
 
-	err = s.repo.ResetUserSensitiveData(ctx, userID)
+	err = s.repo.ResetUserSensitiveData(ctx, s.repo.DB, userID)
 	if err != nil {
-		return nil, fiber.NewError(1, err.Error())
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
 
-	s.logger.Log(ctx.UserContext(), models.StaffCommonLogger, &senderID, &userID, models.ResetUserSensetiveData)
+	s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &senderID, &userID, enums.ResetUserSensetiveData)
 
 	return u, nil
+}
+
+func (s *Service) PopulateBanList(ctx context.Context) (*[]models.Ban, error) {
+	bans, err := s.repo.PopulateBanList(ctx)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+
+	return &bans, nil
 }
