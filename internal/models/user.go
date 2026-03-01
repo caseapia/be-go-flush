@@ -72,7 +72,7 @@ type Notification struct {
 
 	ID        uint64                  `bun:"id,pk,autoincrement,unique" json:"id"`
 	CreatedAt time.Time               `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
-	Type      enums.NotificationsType `bun:"type,notnull,default:information" json:"type"`
+	Type      enums.NotificationsType `bun:"type,type:varchar(50),notnull,default:'information'" json:"type"`
 	Title     string                  `bun:"title" json:"title"`
 	SenderID  *uint64                 `bun:"sender_id" json:"senderId"`
 	UserID    uint64                  `bun:"user_id" json:"userId"`
@@ -86,7 +86,7 @@ type Notification struct {
 type Session struct {
 	bun.BaseModel `bun:"table:sessions"`
 
-	ID          string    `bun:"id,pk,autoincrement,unique"`
+	ID          string    `bun:"id,unique"`
 	UserID      uint64    `bun:"user_id"`
 	RefreshHash string    `bun:"refresh_hash"`
 	UserAgent   string    `bun:"user_agent"`
