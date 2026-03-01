@@ -68,6 +68,8 @@ type Badge struct {
 }
 
 type Notification struct {
+	bun.BaseModel `bun:"table:notifications"`
+
 	ID        uint64                  `bun:"id,pk,autoincrement,unique" json:"id"`
 	CreatedAt time.Time               `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
 	Type      enums.NotificationsType `bun:"type,notnull,default:information" json:"type"`

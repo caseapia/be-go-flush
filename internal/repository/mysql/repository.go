@@ -22,6 +22,8 @@ var MainModels = []interface{}{
 	(*models.Session)(nil),
 	(*models.Ticket)(nil),
 	(*models.TicketMessage)(nil),
+	(*models.Ban)(nil),
+	(*models.Notification)(nil),
 }
 
 var LogModels = []interface{}{
@@ -29,6 +31,7 @@ var LogModels = []interface{}{
 	(*models.PunishmentLog)(nil),
 	(*models.TicketsLog)(nil),
 	(*models.AuthLog)(nil),
+	(*models.TicketAction)(nil),
 }
 
 func RunMigrations(db *bun.DB, tables []interface{}) error {
