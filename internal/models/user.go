@@ -112,11 +112,21 @@ type RankSetterRequest struct {
 	Status int `json:"status"`
 }
 
-type ChangeUserDataRequest struct {
-	Name     *string `json:"name"`
-	Email    *string `json:"email"`
-	Password *string `json:"password"`
-	Status   *int    `json:"status"`
+type ChangeUserPasswordRequest struct {
+	OldPassword *string `json:"old_password"`
+	NewPassword string  `json:"new_password"`
+}
+
+type ChangeUserEmailRequest struct {
+	NewEmail string `json:"new_email"`
+}
+
+type ChangeUserNameRequest struct {
+	NewName string `json:"new_name"`
+}
+
+type ChangeUserStatusRequest struct {
+	NewStatus int `json:"new_status"`
 }
 
 type EditUserFlagsRequest struct {

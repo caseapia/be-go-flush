@@ -40,7 +40,7 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
+			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
+			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
 	}
@@ -154,6 +154,7 @@ func (r *Repository) SoftDelete(ctx context.Context, tx bun.IDB, u *models.User)
 	_, err := tx.NewUpdate().
 		Model(u).
 		Column("name").
+		Set("status = ?", enums.UserStatusDeleted).
 		WherePK().
 		Exec(ctx)
 	return err
@@ -172,7 +173,7 @@ func (r *Repository) LookupByDiscordID(ctx context.Context, discordID string) (*
 		Scan(ctx)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
+			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
 	}

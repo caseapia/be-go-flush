@@ -3,6 +3,7 @@ package user
 import (
 	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/gofiber/fiber/v2"
+
 )
 
 func (h *Handler) RegisterRoutes(router fiber.Router) {
@@ -13,6 +14,9 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group.Get("/account", h.GetOwnAccount)                                    // & Get information about authorized account
 	groupAdmin.Get("/all", middleware.RequireFlag("ADMIN"), h.SearchAllUsers) // ~ Search by all accounts
 	group.Get("/:id", h.SearchUserByID)                                       // & Get information about account by ID (Only staff members can bypass privacy settings)
+	group.Patch("/edit/name/:id", h.ChangeUserName)                               // & Change user name (only staff members can bypass restrictions and change name of other users)
+	group.Patch("/edit/email/:id", h.ChangeUserEmail)                             // & Change user email (only staff members can bypass restrictions and change email of other users)
+	group.Patch("/edit/password/:id", h.ChangeUserPassword)                       // & Change user password (only staff members can bypass restrictions and change password of other users)
 
 	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)                                 // ~ Create a new user
 	groupAdmin.Patch("/ban/:id", middleware.RequireFlag("ADMIN"), h.BanUser)                                  // ~ Ban user
@@ -22,7 +26,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	groupAdmin.Patch("/rank/staff/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.SetStaffRank)            // ~ Set staff rank
 	groupAdmin.Patch("/rank/developer/:id", middleware.RequireFlag("MANAGER"), h.SetDeveloperRank)            // ~ Set developer rank
 	groupAdmin.Get("/:id", middleware.RequireFlag("ADMIN"), h.GetUserPrivate)                                 // ~ Get sensetive user information
-	groupAdmin.Patch("/edit/:id", middleware.RequireFlag("MANAGER"), h.ChangeUser)                            // ~ Change user settings (like e-mail, nickname or password)
+	groupAdmin.Patch("/edit/status/:id", middleware.RequireFlag("LEAD"), h.ChangeUserStatus)                  // ~ Change user status
 	groupAdmin.Patch("/editflag/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.EditUserFlags)             // ~ Edit user access flags (similar with rank flags)
 	groupAdmin.Delete("/reset/:id", middleware.RequireFlag("SENIOR"), h.ResetUserSensetiveData)               // ~ Reset user sensetive data
 	groupAdmin.Patch("/editbadges/:id", middleware.RequireFlag("SENIOR"), h.EditUserBadges)                   // ~ Edit user badges

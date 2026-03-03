@@ -123,7 +123,7 @@ func (s *Service) EditRank(ctx context.Context, sender uint64, rank *models.Rank
 	if err != nil {
 		return nil, err
 	}
-	if searchedRank != nil {
+	if searchedRank != nil && rank.Name != oldRank.Name {
 		return nil, fiber.NewError(fiber.StatusConflict, "rank with that name already exists")
 	}
 

@@ -8,6 +8,8 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
+	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -52,6 +54,69 @@ func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
 	}
 
 	return utils.Success(c, 200, user)
+}
+
+func (h *Handler) ChangeUserPassword(c *fiber.Ctx) error {
+	userID, err := account.GetUserId(c)
+	if err != nil {
+		return err
+	}
+
+	sender := account.GetUserFromContext(c)
+
+	var input models.ChangeUserPasswordRequest
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+	}
+
+	u, err := h.service.ChangeUserPassword(c, userID, sender.ID, input)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, u)
+}
+
+func (h *Handler) ChangeUserEmail(c *fiber.Ctx) error {
+	userID, err := account.GetUserId(c)
+	if err != nil {
+		return err
+	}
+
+	sender := account.GetUserFromContext(c)
+
+	var input models.ChangeUserEmailRequest
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+
+	u, err := h.service.ChangeUserEmail(c, userID, sender.ID, input.NewEmail)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, u)
+}
+
+func (h *Handler) ChangeUserName(c *fiber.Ctx) error {
+	userID, err := account.GetUserId(c)
+	if err != nil {
+		return err
+	}
+
+	sender := account.GetUserFromContext(c)
+
+	var input models.ChangeUserNameRequest
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+
+	u, err := h.service.ChangeUserName(c, userID, sender.ID, input.NewName)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, u)
 }
 
 // ! Admin actions
@@ -260,37 +325,20 @@ func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
 	return utils.Success(c, 200, u)
 }
 
-func (h *Handler) ChangeUser(c *fiber.Ctx) error {
-	userID, err := c.ParamsInt("id")
+func (h *Handler) ChangeUserStatus(c *fiber.Ctx) error {
+	userID, err := account.GetUserId(c)
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
+		return err
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	sender := account.GetUserFromContext(c)
 
-	var input models.ChangeUserDataRequest
-
+	var input models.ChangeUserStatusRequest
 	if err := c.BodyParser(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}
 
-	if input.Name != nil {
-		if len(*input.Name) <= 1 {
-			return fiber.NewError(fiber.StatusBadRequest, "new nickname is too short")
-		}
-	}
-
-	if input.Password != nil {
-		if len(*input.Password) <= 6 {
-			return fiber.NewError(fiber.StatusBadRequest, "new password is too short")
-		}
-	}
-
-	u, err := h.service.ChangeUser(c.UserContext(), sender.ID, uint64(userID), input)
+	u, err := h.service.ChangeUserStatus(c.UserContext(), sender.ID, userID, enums.UserStatus(input.NewStatus))
 	if err != nil {
 		return err
 	}
@@ -311,7 +359,6 @@ func (h *Handler) EditUserFlags(c *fiber.Ctx) error {
 	}
 
 	var input models.EditUserFlagsRequest
-
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
 	}

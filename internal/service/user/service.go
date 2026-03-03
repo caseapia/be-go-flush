@@ -11,6 +11,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
@@ -30,6 +31,44 @@ func NewService(r mysql.Repository, l logger.Service, n notifications.Service) *
 		logger:   l,
 		notifier: n,
 	}
+}
+
+func (s *Service) hardDelete(ctx context.Context, adminID uint64, userID uint64) (bool, error) {
+	var txErr error
+	s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		if err := s.repo.HardDelete(ctx, tx, userID); err != nil {
+			txErr = err
+			return err
+		}
+
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.HardDelete)
+
+		return nil
+	})
+	if txErr != nil {
+		return false, txErr
+	}
+
+	return true, nil
+}
+
+func (s *Service) softDelete(ctx context.Context, adminID uint64, user models.User) (bool, error) {
+	var txErr error
+	s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		if err := s.repo.SoftDelete(ctx, tx, &user); err != nil {
+			txErr = err
+			return err
+		}
+
+		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &user.ID, enums.HardDelete)
+
+		return nil
+	})
+	if txErr != nil {
+		return false, txErr
+	}
+
+	return true, nil
 }
 
 func (s *Service) SearchUser(ctx context.Context, adminID uint64, id uint64) (*models.User, error) {
@@ -63,6 +102,176 @@ func (s *Service) GetOwnAccount(ctx context.Context, id uint64) (*models.User, e
 	}
 
 	return user, nil
+}
+
+func (s *Service) ChangeUserPassword(ctx *fiber.Ctx, userID uint64, senderID uint64, req models.ChangeUserPasswordRequest) (*models.User, error) {
+	u, err := s.repo.SearchUserByID(ctx.UserContext(), userID)
+	if err != nil {
+		return nil, err
+	}
+	staffRank, developerRank := account.GetUserRanksFromContext(ctx)
+
+	// Conditions
+	if senderID == userID {
+		if req.OldPassword == nil {
+			return nil, fiber.NewError(fiber.StatusBadRequest, "old password is required when changing own password")
+		}
+
+		if err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(*req.OldPassword)); err != nil {
+			return nil, fiber.NewError(fiber.StatusForbidden, "old password is incorrect")
+		}
+	} else {
+		if staffRank == nil || (!staffRank.HasFlag("SENIOR") && !developerRank.HasFlag("SENIOR")) {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you don't have permission to change users passwords")
+		}
+		if u.UserHasFlag("MANAGER") {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you cannot change password of this user")
+		}
+	}
+
+	hash, genErr := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if genErr != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, genErr.Error())
+	}
+
+	var txErr error
+	s.repo.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		_, err = s.repo.UpdateUser(ctx.UserContext(), tx, &models.User{
+			ID:       u.ID,
+			Password: string(hash),
+		}, "password")
+		if err != nil {
+			txErr = err
+			return err
+		}
+
+		if senderID != userID {
+			s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &senderID, &userID, enums.ChangeUserPassword)
+		} else {
+			s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &senderID, enums.ChangeUserPassword)
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	u.Password = string(hash)
+
+	if senderID != userID {
+		s.notifier.SendNotification(ctx.UserContext(), userID, enums.Error, "Your password has been changed", "Your password has been changed. If you have not been asked to do this, please inform the administrators immediately.", nil)
+	}
+
+	return u, nil
+}
+
+func (s *Service) ChangeUserEmail(ctx *fiber.Ctx, userID uint64, senderID uint64, newEmail string) (*models.User, error) {
+	u, err := s.repo.SearchUserByID(ctx.UserContext(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	staffRank, developerRank := account.GetUserRanksFromContext(ctx)
+
+	// Conditions
+	if senderID != userID {
+		if !staffRank.HasFlag("SENIOR") || !developerRank.HasFlag("DEV") {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you don't have permission to change users emails")
+		}
+		if u.UserHasFlag("MANAGER") {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you cannot change email of this user")
+		}
+	}
+
+	var txErr error
+	s.repo.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		_, err = s.repo.UpdateUser(ctx.UserContext(), tx, &models.User{
+			ID:    userID,
+			Email: newEmail,
+		}, "email")
+		if err != nil {
+			txErr = err
+			return err
+		}
+
+		addInfo := fmt.Sprintf("Before: %s\nAfter: %s", u.Email, newEmail)
+		if senderID != userID {
+			s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &senderID, &userID, enums.ChangeUserEmail, addInfo)
+		} else {
+			s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &senderID, enums.ChangeUserEmail, addInfo)
+		}
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	u.Email = newEmail
+
+	if senderID != userID {
+		s.notifier.SendNotification(ctx.UserContext(), userID, enums.Error, "Your email has been changed", "Your email has been changed. If you have not been asked to do this, please inform the administrators immediately.", nil)
+	}
+
+	return u, nil
+}
+
+func (s *Service) ChangeUserName(ctx *fiber.Ctx, userID uint64, senderID uint64, newName string) (*models.User, error) {
+	u, err := s.repo.SearchUserByID(ctx.UserContext(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	staffRank, developerRank := account.GetUserRanksFromContext(ctx)
+
+	// Conditions
+	if senderID != userID {
+		if !staffRank.HasFlag("SENIOR") || !developerRank.HasFlag("DEV") {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you don't have permission to change users names")
+		}
+		if u.UserHasFlag("MANAGER") {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you cannot change username of this user")
+		}
+		if u.Status == enums.UserStatusDeleted {
+			return nil, fiber.NewError(fiber.StatusForbidden, "you cannot change username of deleted user")
+		}
+	}
+
+	if strings.Contains(newName, "_old") {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "username cannot contain suffix used for deleted users")
+	}
+
+	var txErr error
+	s.repo.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		_, err = s.repo.UpdateUser(ctx.UserContext(), tx, &models.User{
+			ID:   userID,
+			Name: newName,
+		}, "name")
+		if err != nil {
+			txErr = err
+			return err
+		}
+
+		addInfo := fmt.Sprintf("Before: %s\nAfter: %s", u.Name, newName)
+		if senderID != userID {
+			s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &senderID, &userID, enums.ChangeUserNickname, addInfo)
+		} else {
+			s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &senderID, enums.ChangeUserNickname, addInfo)
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	u.Name = newName
+
+	if senderID != userID {
+		s.notifier.SendNotification(ctx.UserContext(), userID, enums.Error, "Your username has been changed", "Your username has been changed. If you have not been asked to do this, please inform the administrators immediately.", nil)
+	}
+
+	return u, nil
 }
 
 // ! Admin actions
@@ -169,37 +378,33 @@ func (s *Service) DeleteUser(ctx context.Context, adminID uint64, id uint64) (*m
 		return nil, err
 	}
 
-	if r.HasFlag("MANAGER") {
+	if r.HasFlag("MANAGER") || u.UserHasFlag("MANAGER") {
 		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.TriedToDeleteManager)
 
-		return nil, fiber.ErrForbidden
+		return nil, fiber.NewError(fiber.StatusForbidden, "this user cannot be deleted")
 	}
 
+	// Hard delete
 	if u.Status == enums.UserStatusDeleted {
-		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.HardDelete)
-
-		if err := s.repo.HardDelete(ctx, s.repo.DB, id); err != nil {
+		isDeleted, err := s.hardDelete(ctx, adminID, id)
+		if err != nil {
 			return nil, err
 		}
 
-		return nil, nil
+		if isDeleted == true {
+			return nil, nil
+		}
 	}
 
-	s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &id, enums.SoftDelete)
+	// Soft delete
+	isDeleted, err := s.softDelete(ctx, adminID, *u)
+	if err != nil {
+		return nil, err
+	}
 
-	u.Status = enums.UserStatusDeleted
-
-	s.repo.WithTx(ctx, func(tx bun.Tx) error {
-		if err := s.repo.SoftDelete(ctx, tx, u); err != nil {
-			return err
-		}
-
-		if _, err := s.repo.UpdateUser(ctx, tx, u); err != nil {
-			return err
-		}
-
-		return nil
-	})
+	if isDeleted == true {
+		u.Status = enums.UserStatusDeleted
+	}
 
 	return u, nil
 }
@@ -350,56 +555,38 @@ func (s *Service) SetDeveloperRank(ctx context.Context, adminID uint64, userId u
 	return setRank, nil
 }
 
-func (s *Service) ChangeUser(ctx context.Context, adminID uint64, userID uint64, input models.ChangeUserDataRequest) (*models.User, error) {
+func (s *Service) ChangeUserStatus(ctx context.Context, senderID uint64, userID uint64, newStatus enums.UserStatus) (*models.User, error) {
 	u, err := s.repo.SearchUserByID(ctx, userID)
 	if err != nil {
-		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
+		return nil, err
 	}
 
-	var hash []byte
-	if input.Password != nil {
-		var genErr error
-		hash, genErr = bcrypt.GenerateFromPassword([]byte(*input.Password), bcrypt.DefaultCost)
-		if genErr != nil {
-			return nil, genErr
+	// Conditions
+	if newStatus <= enums.UserStatusNotVerified && newStatus >= enums.UserStatusRequiresPasswordChange {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "invalid status")
+	}
+
+	var txErr error
+	s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		_, err := s.repo.UpdateUser(ctx, tx, &models.User{
+			ID:     userID,
+			Status: newStatus,
+		}, "status")
+		if err != nil {
+			txErr = err
+			return err
 		}
-		u.Password = string(hash)
-	}
-	oldInfo := fmt.Sprintf("Name: %s | Email: %s | Status: %v", u.Name, u.Email, enums.UserStatus(u.Status))
 
-	if input.Name != nil {
-		u.Name = *input.Name
-	}
-	if input.Email != nil {
-		u.Email = *input.Email
-	}
-	if input.Password != nil {
-		u.Password = string(hash)
-	}
-	if input.Status != nil {
-		newStatus := enums.UserStatus(*input.Status)
-		if newStatus >= enums.UserStatusNotVerified && newStatus <= enums.UserStatusRequiresPasswordChange {
-			u.Status = newStatus
-		} else {
-			fiber.NewError(fiber.StatusBadRequest, "invalid state")
-		}
+		addInfo := fmt.Sprintf("Before: %d\nAfter: %d", enums.UserStatus(u.Status), newStatus)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &senderID, &userID, enums.ChangeUserStatus, addInfo)
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
 	}
 
-	err = s.repo.ChangeUserData(ctx, s.repo.DB, u, input.Name != nil, input.Email != nil, hash != nil, input.Status != nil)
-	if err != nil {
-		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
-	}
-
-	newInfo := fmt.Sprintf("Name: %s | Email: %s | Status %v", u.Name, u.Email, enums.UserStatus(u.Status))
-
-	if input.Password == nil {
-		addInfo := fmt.Sprintf("Before: %s\nAfter: %s", oldInfo, newInfo)
-		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.ChangeUserData, addInfo)
-		s.notifier.SendNotification(ctx, userID, enums.Error, "Your credentials has been changed", "Your username or e-mail has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", nil)
-	} else {
-		s.logger.Log(ctx, enums.StaffCommonLogger, &adminID, &userID, enums.ChangeUserPassword)
-		s.notifier.SendNotification(ctx, userID, enums.Error, "Your password has been changed", "Your password has been changed by the admin. If you have not been asked to do this, please inform the administrators immediately.", nil)
-	}
+	u.Status = newStatus
 
 	return u, nil
 }
