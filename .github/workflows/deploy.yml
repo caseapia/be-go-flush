@@ -1,4 +1,4 @@
-name: Build and Deploy (Full Info Mode)
+name: Build and Deploy
 
 on:
   push:
@@ -8,19 +8,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. Notify Discord - Deployment Started
-      - name: Notify Discord - Start
-        run: |
-          curl -H "Content-Type: application/json" -X POST -d '{
-            "embeds": [{
-              "title": "🚀 Deployment Started",
-              "description": "Starting the build and deployment process for **be-go-flush**.",
-              "color": 3447003
-            }]
-          }' ${{ secrets.DISCORD_WEBHOOK }}
-
-      # 2. Main Process via SSH
-      - name: Execution via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -32,82 +20,42 @@ jobs:
             PROJECT_DIR="/var/www/be-go-flush"
             TEMP_DIR="/var/www/be-go-flush_temp"
 
-            echo "--- STEP 1: PREPARATION ---"
+            # Функция безопасной отправки в Discord
+            send_discord() {
+              curl -k -H "Content-Type: application/json" -X POST -d "$1" "$WEBHOOK" || echo "Warning: Discord notification failed."
+            }
+
+            send_discord '{"content": "🚀 **Deployment started for be-go-flush...**"}'
+
+            # 1. Build
             mkdir -p $PROJECT_DIR
             rm -rf $TEMP_DIR
-
-            echo "--- STEP 2: CLONING REPOSITORY ---"
             git clone https://github.com/caseapia/be-go-flush.git $TEMP_DIR
             cd $TEMP_DIR
 
-            echo "--- STEP 3: BUILDING PROJECT (GO BUILD) ---"
             MAIN_PATH=$(find . -name "main.go" -print -quit)
-            if [ -z "$MAIN_PATH" ]; then
-              curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"❌ Error: main.go not found!\"}" $WEBHOOK
-              exit 1
-            fi
-
             /usr/bin/go mod tidy
             /usr/bin/go build -o server_bin $MAIN_PATH
-            echo "Build successful: server_bin created."
 
-            echo "--- STEP 4: MOVING BINARY ---"
+            # 2. Deploy
             mv server_bin $PROJECT_DIR/server_bin
             chmod +x $PROJECT_DIR/server_bin
-
-            echo "--- STEP 5: CLEANUP (REMOVING SOURCE CODE) ---"
             rm -rf $TEMP_DIR
+
             cd $PROJECT_DIR
-            # Keep only binary, .env, and logs
             find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name 'log.txt' ! -name '.' -exec rm -rf {} +
-            echo "Directory cleaned. Only binary remains."
 
-            echo "--- STEP 6: RESTARTING SERVICE ---"
+            # 3. Restart
             systemctl restart gobackend
-            echo "Service gobackend restarted."
 
-            echo "--- STEP 7: COLLECTING SYSTEM METRICS ---"
-            sleep 3 # Wait for process to stabilize
-
+            # 4. Metrics
+            sleep 3
             PID=$(pgrep -f server_bin | head -n 1)
-            if [ -z "$PID" ]; then
-              curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"⚠️ Service restarted but PID not found!\"}" $WEBHOOK
-              exit 1
-            fi
-
-            # Gathering stats
-            PROC_NAME="server_bin"
-            CPU_USAGE=$(ps -p $PID -o %cpu --no-headers | xargs)
-            MEM_USAGE_PROC=$(ps -p $PID -o rss --no-headers | awk '{printf "%.2f MB", $1/1024}')
+            CPU=$(ps -p $PID -o %cpu --no-headers | xargs)
+            MEM=$(ps -p $PID -o rss --no-headers | awk '{printf "%.2f MB", $1/1024}')
             UPTIME=$(ps -p $PID -o etime --no-headers | xargs)
-            SYS_MEM=$(free -m | awk '/Mem:/ {print $3 "/" $2 " MB"}')
 
-            # Sending Success Embed with Stats
-            curl -H "Content-Type: application/json" -X POST -d '{
-              "embeds": [{
-                "title": "✅ Deployment Successful",
-                "description": "Backend updated. Source code flushed. Service is healthy.",
-                "color": 5025616,
-                "fields": [
-                  {"name": "Process Name", "value": "'"$PROC_NAME"'", "inline": true},
-                  {"name": "PID", "value": "'"$PID"'", "inline": true},
-                  {"name": "Uptime", "value": "'"$UPTIME"'", "inline": true},
-                  {"name": "CPU Usage", "value": "'"$CPU_USAGE"'%", "inline": true},
-                  {"name": "RAM (Process)", "value": "'"$MEM_USAGE_PROC"'", "inline": true},
-                  {"name": "System RAM (Used/Total)", "value": "'"$SYS_MEM"'", "inline": true}
-                ],
-                "footer": { "text": "Server IP: ${{ secrets.SERVER_IP }}" }
-              }]
-            }' $WEBHOOK
+            # Формируем JSON через переменные для надежности
+            PAYLOAD=$(printf '{"embeds": [{"title": "✅ Deployment Successful", "color": 5025616, "fields": [{"name": "PID", "value": "%s", "inline": true}, {"name": "CPU", "value": "%s%%", "inline": true}, {"name": "RAM", "value": "%s", "inline": true}, {"name": "Uptime", "value": "%s", "inline": true}]}]}' "$PID" "$CPU" "$MEM" "$UPTIME")
 
-      # 3. Notify Discord - Failure (Generic)
-      - name: Notify Discord - Failure
-        if: failure()
-        run: |
-          curl -H "Content-Type: application/json" -X POST -d '{
-            "embeds": [{
-              "title": "❌ DEPLOYMENT FAILED",
-              "description": "An error occurred during the SSH execution. Check GitHub Actions logs for details.",
-              "color": 16711680
-            }]
-          }' ${{ secrets.DISCORD_WEBHOOK }}
+            send_discord "$PAYLOAD"
