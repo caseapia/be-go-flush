@@ -1,48 +1,32 @@
-name: Deploy Go Backend
+name: Build and Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.8.2
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+          host: 91.229.10.145
+          username: root
+          password: ${{ secrets.SERVER_PASSWORD }}
+          script: |
+            mkdir -p /var/www/be-go-flush
+            cd /var/www/be-go-flush
 
-      - name: Deploy to server
-        run: |
-          ssh -o StrictHostKeyChecking=no root@91.229.10.145 << 'EOF'
-            cd /opt/be-go-flush || mkdir -p /opt/be-go-flush && cd /opt/be-go-flush
-            git fetch --all
-            git reset --hard origin/main
-            go build -o be-flush .
-            find . -type f ! -name 'be-flush' -delete
+            # Клонируем или обновляем исходники
+            if [ -d ".git" ]; then git pull; else git clone https://github.com/caseapia/be-go-flush.git .; fi
 
-          if [ ! -f /etc/systemd/system/be-go-flush.service ]; then
-            echo "[Unit]
-          Description=Go Backend Service
-          After=network.target
+            # Билд проекта
+            /usr/bin/go build -o server_bin main.go
 
-          [Service]
-          WorkingDirectory=/opt/be-go-flush
-          ExecStart=/opt/be-go-flush/be-flush
-          Restart=always
-          User=root
+            # Очистка: удаляем всё, кроме бинарника и .env (если есть)
+            find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name '.' -exec rm -rf {} +
 
-          [Install]
-          WantedBy=multi-user.target" > /etc/systemd/system/be-go-flush.service
-          fi
-
-                  systemctl daemon-reload
-                  systemctl enable be-go-flush
-                  systemctl restart be-go-flush
-                EOF
+            # Перезапуск (лучше использовать systemd, см. ниже)
+            pkill server_bin || true
+            nohup ./server_bin > log.txt 2>&1 &
