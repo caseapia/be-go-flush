@@ -1,0 +1,48 @@
+name: Deploy Go Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.2
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Deploy to server
+        run: |
+          ssh -o StrictHostKeyChecking=no root@91.229.10.145 << 'EOF'
+            cd /opt/be-go-flush || mkdir -p /opt/be-go-flush && cd /opt/be-go-flush
+            git fetch --all
+            git reset --hard origin/main
+            go build -o be-flush .
+            find . -type f ! -name 'be-flush' -delete
+
+          if [ ! -f /etc/systemd/system/be-go-flush.service ]; then
+            echo "[Unit]
+          Description=Go Backend Service
+          After=network.target
+
+          [Service]
+          WorkingDirectory=/opt/be-go-flush
+          ExecStart=/opt/be-go-flush/be-flush
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target" > /etc/systemd/system/be-go-flush.service
+          fi
+
+                  systemctl daemon-reload
+                  systemctl enable be-go-flush
+                  systemctl restart be-go-flush
+                EOF
