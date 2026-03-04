@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [master] # Убедись, что ветка называется master, а не main
+    branches: [master]
 
 jobs:
   deploy:
@@ -12,31 +12,33 @@ jobs:
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USERNAME}}
+          username: root
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            set -e # Остановить выполнение при любой ошибке
-
+            set -e
             PROJECT_DIR="/var/www/be-go-flush"
+            TEMP_DIR="/var/www/be-go-flush_temp"
+
             mkdir -p $PROJECT_DIR
-            cd $PROJECT_DIR
 
-            # 1. Обновляем код
-            if [ -d ".git" ]; then
-              git fetch --all
-              git reset --hard origin/master
-            else
-              git clone https://github.com/caseapia/be-go-flush.git .
-            fi
+            # 1. Клонируем во временную папку, чтобы не было конфликтов с бинарником
+            rm -rf $TEMP_DIR
+            git clone https://github.com/caseapia/be-go-flush.git $TEMP_DIR
 
-            # 2. Установка зависимостей и билд
-            # Если main.go лежит в корне, используем '.', если нет - укажи путь
+            # 2. Переходим в темп и билдим
+            cd $TEMP_DIR
             /usr/bin/go mod tidy
             /usr/bin/go build -o server_bin .
 
-            # 3. Очистка (удаляем всё кроме бинарника и .env)
-            # Мы используем временный файл, чтобы find не удалил сам себя в процессе
-            find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name '.' -exec rm -rf {} +
+            # 3. Переносим бинарник в основную папку
+            mv server_bin $PROJECT_DIR/server_bin
 
-            # 4. Перезапуск сервиса (Systemd)
+            # 4. Очистка: удаляем исходники (темп-папку)
+            rm -rf $TEMP_DIR
+
+            # 5. В основной папке оставляем ТОЛЬКО бинарник и .env
+            cd $PROJECT_DIR
+            find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name 'log.txt' ! -name '.' -exec rm -rf {} +
+
+            # 6. Перезапуск сервиса
             systemctl restart gobackend
