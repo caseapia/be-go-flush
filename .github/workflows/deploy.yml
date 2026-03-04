@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [master]
+    branches: [master] # Убедись, что ветка называется master, а не main
 
 jobs:
   deploy:
@@ -11,22 +11,32 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
-          host: 91.229.10.145
-          username: root
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USERNAME}}
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
-            mkdir -p /var/www/be-go-flush
-            cd /var/www/be-go-flush
+            set -e # Остановить выполнение при любой ошибке
 
-            # Клонируем или обновляем исходники
-            if [ -d ".git" ]; then git pull; else git clone https://github.com/caseapia/be-go-flush.git .; fi
+            PROJECT_DIR="/var/www/be-go-flush"
+            mkdir -p $PROJECT_DIR
+            cd $PROJECT_DIR
 
-            # Билд проекта
-            /usr/bin/go build -o server_bin main.go
+            # 1. Обновляем код
+            if [ -d ".git" ]; then
+              git fetch --all
+              git reset --hard origin/master
+            else
+              git clone https://github.com/caseapia/be-go-flush.git .
+            fi
 
-            # Очистка: удаляем всё, кроме бинарника и .env (если есть)
+            # 2. Установка зависимостей и билд
+            # Если main.go лежит в корне, используем '.', если нет - укажи путь
+            /usr/bin/go mod tidy
+            /usr/bin/go build -o server_bin .
+
+            # 3. Очистка (удаляем всё кроме бинарника и .env)
+            # Мы используем временный файл, чтобы find не удалил сам себя в процессе
             find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name '.' -exec rm -rf {} +
 
-            # Перезапуск (лучше использовать systemd, см. ниже)
-            pkill server_bin || true
-            nohup ./server_bin > log.txt 2>&1 &
+            # 4. Перезапуск сервиса (Systemd)
+            systemctl restart gobackend
