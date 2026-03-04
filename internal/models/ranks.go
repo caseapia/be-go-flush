@@ -29,7 +29,7 @@ type CreateRankRequest struct {
 
 func (r *Rank) HasFlag(flag string) bool {
 	for _, f := range r.Flags {
-		if f == flag {
+		if f == flag || f == "MANAGER" {
 			return true
 		}
 	}
