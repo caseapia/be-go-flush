@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build and Deploy (Full Info Mode)
 
 on:
   push:
@@ -8,7 +8,19 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      # 1. Уведомление в Discord о начале процесса
+      - name: Notify Discord - Start
+        run: |
+          curl -H "Content-Type: application/json" -X POST -d '{
+            "embeds": [{
+              "title": "🚀 Деплой запущен",
+              "description": "Начинаю процесс сборки проекта **be-go-flush** на сервере.",
+              "color": 3447003
+            }]
+          }' ${{ secrets.DISCORD_WEBHOOK }}
+
+      # 2. Основной процесс на сервере
+      - name: Execution via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -16,29 +28,75 @@ jobs:
           password: ${{ secrets.SERVER_PASSWORD }}
           script: |
             set -e
+            WEBHOOK="${{ secrets.DISCORD_WEBHOOK }}"
             PROJECT_DIR="/var/www/be-go-flush"
             TEMP_DIR="/var/www/be-go-flush_temp"
 
+            function notify() {
+              curl -H "Content-Type: application/json" -X POST -d "{\"content\": \"$1\"}" $WEBHOOK
+            }
+
+            echo "--- ЭТАП 1: ПОДГОТОВКА ---"
             mkdir -p $PROJECT_DIR
-
-            # 1. Клонируем во временную папку, чтобы не было конфликтов с бинарником
             rm -rf $TEMP_DIR
+
+            echo "--- ЭТАП 2: КЛОНИРОВАНИЕ РЕПОЗИТОРИЯ ---"
             git clone https://github.com/caseapia/be-go-flush.git $TEMP_DIR
-
-            # 2. Переходим в темп и билдим
             cd $TEMP_DIR
+
+            echo "--- ЭТАП 3: СБОРКА ПРОЕКТА (GO BUILD) ---"
+            # Ищем main.go
+            MAIN_PATH=$(find . -name "main.go" -print -quit)
+            if [ -z "$MAIN_PATH" ]; then
+              notify "❌ Ошибка: main.go не найден в репозитории!"
+              exit 1
+            fi
+
             /usr/bin/go mod tidy
-            /usr/bin/go build -o server_bin .
+            /usr/bin/go build -o server_bin $MAIN_PATH
+            echo "Билд успешно завершен: server_bin создан."
 
-            # 3. Переносим бинарник в основную папку
+            echo "--- ЭТАП 4: РОКИРОВКА БИНАРНИКА ---"
             mv server_bin $PROJECT_DIR/server_bin
+            chmod +x $PROJECT_DIR/server_bin
 
-            # 4. Очистка: удаляем исходники (темп-папку)
+            echo "--- ЭТАП 5: ОЧИСТКА (УДАЛЕНИЕ ИСХОДНИКОВ) ---"
+            # Удаляем временную папку с кодом
             rm -rf $TEMP_DIR
 
-            # 5. В основной папке оставляем ТОЛЬКО бинарник и .env
+            # Удаляем всё лишнее в рабочей папке, оставляем только бинарник, .env и логи
             cd $PROJECT_DIR
             find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name 'log.txt' ! -name '.' -exec rm -rf {} +
+            echo "Директория очищена. Остался только бинарник."
 
-            # 6. Перезапуск сервиса
+            echo "--- ЭТАП 6: ПЕРЕЗАПУСК СЕРВИСА ---"
             systemctl restart gobackend
+            echo "Сервис gobackend перезапущен."
+
+      # 3. Уведомление об успехе
+      - name: Notify Discord - Success
+        if: success()
+        run: |
+          curl -H "Content-Type: application/json" -X POST -d '{
+            "embeds": [{
+              "title": "✅ Деплой завершен успешно",
+              "description": "Бекенд обновлен. Исходники удалены. Сервис работает.",
+              "color": 5025616,
+              "fields": [
+                {"name": "IP Сервера", "value": "${{ secrets.SERVER_IP }}", "inline": true},
+                {"name": "Ветка", "value": "master", "inline": true}
+              ]
+            }]
+          }' ${{ secrets.DISCORD_WEBHOOK }}
+
+      # 4. Уведомление об ошибке
+      - name: Notify Discord - Failure
+        if: failure()
+        run: |
+          curl -H "Content-Type: application/json" -X POST -d '{
+            "embeds": [{
+              "title": "❌ ОШИБКА ДЕПЛОЯ",
+              "description": "Что-то пошло не так во время выполнения скрипта на сервере.",
+              "color": 16711680
+            }]
+          }' ${{ secrets.DISCORD_WEBHOOK }}
