@@ -1,61 +1,50 @@
-name: Build and Deploy
+name: Deploy to Production
 
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
+    environment: production
+
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: root
-          password: ${{ secrets.SERVER_PASSWORD }}
-          script: |
-            set -e
-            WEBHOOK="${{ secrets.DISCORD_WEBHOOK }}"
-            PROJECT_DIR="/var/www/be-go-flush"
-            TEMP_DIR="/var/www/be-go-flush_temp"
+          go-version: "1.22"
+          cache: true
 
-            # Функция безопасной отправки в Discord
-            send_discord() {
-              curl -k -H "Content-Type: application/json" -X POST -d "$1" "$WEBHOOK" || echo "Warning: Discord notification failed."
-            }
+      - name: Run tests
+        run: go test ./... -race -timeout 60s
 
-            send_discord '{"content": "🚀 **Deployment started for be-go-flush...**"}'
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-            # 1. Build
-            mkdir -p $PROJECT_DIR
-            rm -rf $TEMP_DIR
-            git clone https://github.com/caseapia/be-go-flush.git $TEMP_DIR
-            cd $TEMP_DIR
+      - name: Add server to known_hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-            MAIN_PATH=$(find . -name "main.go" -print -quit)
-            /usr/bin/go mod tidy
-            /usr/bin/go build -o server_bin $MAIN_PATH
+      - name: Deploy to server
+        run: |
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            'bash /opt/flush/deploy.sh 2>&1 | tee -a /var/log/flush/deploy.log'
 
-            # 2. Deploy
-            mv server_bin $PROJECT_DIR/server_bin
-            chmod +x $PROJECT_DIR/server_bin
-            rm -rf $TEMP_DIR
+      - name: Verify deployment
+        run: |
+          sleep 5
+          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            'sudo systemctl is-active flush'
 
-            cd $PROJECT_DIR
-            find . -maxdepth 1 ! -name 'server_bin' ! -name '.env' ! -name 'log.txt' ! -name '.' -exec rm -rf {} +
-
-            # 3. Restart
-            systemctl restart gobackend
-
-            # 4. Metrics
-            sleep 3
-            PID=$(pgrep -f server_bin | head -n 1)
-            CPU=$(ps -p $PID -o %cpu --no-headers | xargs)
-            MEM=$(ps -p $PID -o rss --no-headers | awk '{printf "%.2f MB", $1/1024}')
-            UPTIME=$(ps -p $PID -o etime --no-headers | xargs)
-
-            # Формируем JSON через переменные для надежности
-            PAYLOAD=$(printf '{"embeds": [{"title": "✅ Deployment Successful", "color": 5025616, "fields": [{"name": "PID", "value": "%s", "inline": true}, {"name": "CPU", "value": "%s%%", "inline": true}, {"name": "RAM", "value": "%s", "inline": true}, {"name": "Uptime", "value": "%s", "inline": true}]}]}' "$PID" "$CPU" "$MEM" "$UPTIME")
-
-            send_discord "$PAYLOAD"
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Деплой завершился с ошибкой! Проверьте логи."
