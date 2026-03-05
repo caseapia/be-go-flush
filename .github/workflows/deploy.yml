@@ -121,7 +121,7 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ **Deployment Failed** in ${{ github.repository }}. [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
+            -d "{\"content\": \"<@531462564304125962>\n\n❌ **Deployment Failed** in ${{ github.repository }}. [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
 
       - name: Cleanup SSH key
         if: always()

@@ -94,6 +94,10 @@ func (s *Service) GetUsersList(ctx context.Context) ([]models.User, error) {
 
 func (s *Service) GetOwnAccount(ctx context.Context, id uint64) (*models.User, error) {
 	user, err := s.repo.SearchUserByID(ctx, id)
+	slog.WithData(slog.M{
+		"user":  user,
+		"error": err,
+	}).Debug("service GetOwnAccount")
 	if err != nil {
 		return nil, err
 	}

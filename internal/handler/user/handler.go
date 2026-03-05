@@ -53,7 +53,7 @@ func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
 		"e":               err,
 		"userFromContext": userFromContext,
 		"user":            user,
-	})
+	}).Debug("handler GetOwnAccount")
 
 	return utils.Success(c, 200, user)
 }
