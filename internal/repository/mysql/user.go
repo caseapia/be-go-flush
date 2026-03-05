@@ -29,15 +29,11 @@ func (r *Repository) populateUserBadges(ctx context.Context, u *models.User) err
 }
 func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.User, error) {
 	u := &models.User{ID: id}
-
 	err := r.DB.NewSelect().
 		Model(u).
 		WherePK().
 		Relation("ActiveBan").
-		Relation("ActiveBan.Admin").
-		Relation("ActiveBan.Target").
 		Scan(ctx)
-
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, &fiber.Error{Code: 404, Message: "user not found"}
@@ -45,15 +41,24 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 		return nil, err
 	}
 
+	if u.ActiveBan != nil {
+		if err := r.DB.NewSelect().
+			Model(u.ActiveBan).
+			Relation("Admin").
+			Relation("Target").
+			WherePK().
+			Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+	}
+
 	u.Badges = make([]models.Badge, 0)
 	if u.BadgeIDs == nil {
 		u.BadgeIDs = make([]uint64, 0)
 	}
-
 	if len(u.BadgeIDs) > 0 {
 		_ = r.populateUserBadges(ctx, u)
 	}
-
 	return u, nil
 }
 

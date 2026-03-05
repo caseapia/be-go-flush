@@ -3,7 +3,6 @@ package user
 import (
 	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 func (h *Handler) RegisterRoutes(router fiber.Router) {
@@ -14,9 +13,9 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group.Get("/account", h.GetOwnAccount)                                    // & Get information about authorized account
 	groupAdmin.Get("/all", middleware.RequireFlag("ADMIN"), h.SearchAllUsers) // ~ Search by all accounts
 	group.Get("/:id", h.SearchUserByID)                                       // & Get information about account by ID (Only staff members can bypass privacy settings)
-	group.Patch("/edit/name/:id", h.ChangeUserName)                               // & Change user name (only staff members can bypass restrictions and change name of other users)
-	group.Patch("/edit/email/:id", h.ChangeUserEmail)                             // & Change user email (only staff members can bypass restrictions and change email of other users)
-	group.Patch("/edit/password/:id", h.ChangeUserPassword)                       // & Change user password (only staff members can bypass restrictions and change password of other users)
+	group.Patch("/edit/name/:id", h.ChangeUserName)                           // & Change user name (only staff members can bypass restrictions and change name of other users)
+	group.Patch("/edit/email/:id", h.ChangeUserEmail)                         // & Change user email (only staff members can bypass restrictions and change email of other users)
+	group.Patch("/edit/password/:id", h.ChangeUserPassword)                   // & Change user password (only staff members can bypass restrictions and change password of other users)
 
 	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)                                 // ~ Create a new user
 	groupAdmin.Patch("/ban/:id", middleware.RequireFlag("ADMIN"), h.BanUser)                                  // ~ Ban user
