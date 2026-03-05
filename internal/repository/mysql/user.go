@@ -41,6 +41,11 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 		return nil, err
 	}
 
+	slog.WithData(slog.M{
+		"user": u,
+		"id":   id,
+	}).Debug("User lookup by ID repository")
+
 	if u.ActiveBan != nil {
 		if err := r.DB.NewSelect().
 			Model(u.ActiveBan).
