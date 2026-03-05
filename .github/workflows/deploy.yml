@@ -25,12 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-
       - name: Run tests
         run: go test -v ./...
 
@@ -38,10 +36,8 @@ jobs:
     name: Deploy
     needs: test
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -58,87 +54,55 @@ jobs:
           mkdir -p ~/.ssh
           echo '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p ${{ secrets.DEPLOY_PORT }} \
-            -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p ${{ secrets.DEPLOY_PORT }} -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
       - name: Upload binary
         run: |
-          scp -P ${{ secrets.DEPLOY_PORT }} \
-              -i ~/.ssh/deploy_key \
-              ${{ env.BINARY_NAME }} \
-              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
+          scp -P ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+            ${{ env.BINARY_NAME }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
 
       - name: Deploy and restart service
-        id: deploy
+        id: deploy_step
         run: |
-          ssh -p ${{ secrets.DEPLOY_PORT }} \
-              -i ~/.ssh/deploy_key \
-              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-              'bash -s' << 'ENDSSH'
+          ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'bash -s' << 'ENDSSH'
             set -e
-
             sudo systemctl stop flush-api
-
-            if [ -f /opt/flush/bin/flush-api ]; then
-              cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
-            fi
-
+            [ -f /opt/flush/bin/flush-api ] && cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
             mv /tmp/flush-api-new /opt/flush/bin/flush-api
             chmod 750 /opt/flush/bin/flush-api
 
-            if [ "$DEBUG_MODE" = "true" ]; then
+            if [ "${{ github.event.inputs.debug }}" = "true" ]; then
               sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api -debug|' /etc/systemd/system/flush-api.service
-              echo "Starting in DEBUG mode"
             else
               sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api|' /etc/systemd/system/flush-api.service
-              echo "Starting in PRODUCTION mode"
             fi
 
             sudo systemctl daemon-reload
             sudo systemctl start flush-api
-
-            sleep 10
-            STATUS=$(sudo systemctl is-active flush-api)
-            echo "Service status: $STATUS"
+            sleep 5
             
-            if [ "$STATUS" != "active" ]; then
-              echo 'Deployment failed, rolling back...'
-              echo '--- Error logs ---'
-              sudo journalctl -u flush-api -n 30 --no-pager
-              cp /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
-              sudo systemctl start flush-api
-              exit 1
-            fi
+            # Сбор статистики
+            echo "cpu_load=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')"
+            echo "mem_usage=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')"
+            echo "disk_usage=$(df -h / | awk 'NR==2 {print $5}')"
+            echo "uptime=$(uptime -p)"
+            echo "process_mem=$(ps -u ${{ secrets.DEPLOY_USER }} -o rss,command | grep '${{ env.BINARY_NAME }}' | grep -v grep | awk '{printf "%.2f MB", $1/1024}')"
+          ENDSSH > stats.tmp
 
-            echo ''
-            echo '======================================='
-            echo '   DEPLOY SUCCESSFUL'
-            echo '======================================='
-            echo ''
-            echo '--- Process info ---'
-            sudo systemctl status flush-api --no-pager -l
-            echo ''
-            echo '--- Last 20 lines of logs ---'
-            sudo journalctl -u flush-api -n 20 --no-pager
-            echo ''
-            echo '--- Useful commands ---'
-            echo 'View logs live:    sudo journalctl -u flush-api -f'
-            echo 'View logs (last):  sudo journalctl -u flush-api -n 50 --no-pager'
-            echo 'Service status:    sudo systemctl status flush-api'
-            echo 'Restart service:   sudo systemctl restart flush-api'
-            echo '======================================='
-          ENDSSH
+          # Читаем результат из временного файла и отправляем в GITHUB_OUTPUT
+          cat stats.tmp >> $GITHUB_OUTPUT
+          rm stats.tmp
 
       - name: Notify Discord - Success
         if: success()
         run: |
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
-          COMMIT_SHA="${{ github.sha }}"
-          ACTOR="${{ github.actor }}"
-          REPO="${{ github.repository }}"
-          RUN_URL="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
+          STATS_FIELD="📊 **CPU:** ${{ steps.deploy_step.outputs.cpu_load }} | **Disk:** ${{ steps.deploy_step.outputs.disk_usage }}\n🧠 **RAM:** ${{ steps.deploy_step.outputs.mem_usage }}\n💎 **App RAM:** ${{ steps.deploy_step.outputs.process_mem }}\n⏱️ **Uptime:** ${{ steps.deploy_step.outputs.uptime }}"
 
-          curl -s -X POST "https://discord.com/api/webhooks/1469429197197017089/a8kJUQnFkTaKGAW8DZbeQSkAlPvCZpbH4MKg5AZEwYRF2zOI3T-9P2tEKVjalhJ48mqR" \
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "{
               \"embeds\": [{
@@ -146,11 +110,11 @@ jobs:
                 \"color\": 3066993,
                 \"fields\": [
                   { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
-                  { \"name\": \"👤 Author\", \"value\": \"$ACTOR\", \"inline\": true },
-                  { \"name\": \"📝 Commit\", \"value\": \"\`${COMMIT_SHA:0:7}\` $COMMIT_MSG\", \"inline\": false },
-                  { \"name\": \"🔗 Actions\", \"value\": \"[View Run]($RUN_URL)\", \"inline\": false }
+                  { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
+                  { \"name\": \"📈 Server Status\", \"value\": \"$STATS_FIELD\", \"inline\": false },
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ github.sha }}\` $COMMIT_MSG\", \"inline\": false }
                 ],
-                \"footer\": { \"text\": \"$REPO\" },
+                \"footer\": { \"text\": \"${{ github.repository }}\" },
                 \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
               }]
             }"
@@ -158,28 +122,9 @@ jobs:
       - name: Notify Discord - Failure
         if: failure()
         run: |
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
-          COMMIT_SHA="${{ github.sha }}"
-          ACTOR="${{ github.actor }}"
-          REPO="${{ github.repository }}"
-          RUN_URL="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
-
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"❌ Deploy Failed\",
-                \"color\": 15158332,
-                \"fields\": [
-                  { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
-                  { \"name\": \"👤 Author\", \"value\": \"$ACTOR\", \"inline\": true },
-                  { \"name\": \"📝 Commit\", \"value\": \"\`${COMMIT_SHA:0:7}\` $COMMIT_MSG\", \"inline\": false },
-                  { \"name\": \"🔗 Actions\", \"value\": \"[View Run]($RUN_URL)\", \"inline\": false }
-                ],
-                \"footer\": { \"text\": \"$REPO\" },
-                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
-              }]
-            }"
+            -d "{\"content\": \"❌ **Deployment Failed** in ${{ github.repository }}. [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
 
       - name: Cleanup SSH key
         if: always()
