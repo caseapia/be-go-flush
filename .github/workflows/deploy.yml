@@ -59,6 +59,7 @@ jobs:
               ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
 
       - name: Deploy and restart service
+        id: deploy
         run: |
           ssh -p ${{ secrets.DEPLOY_PORT }} \
               -i ~/.ssh/deploy_key \
@@ -66,22 +67,17 @@ jobs:
               'bash -s' << 'ENDSSH'
             set -e
 
-            # Останавливаем сервис
             sudo systemctl stop flush-api
 
-            # Бэкап старого бинарника
             if [ -f /opt/flush/bin/flush-api ]; then
               cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
             fi
 
-            # Устанавливаем новый
             mv /tmp/flush-api-new /opt/flush/bin/flush-api
             chmod 750 /opt/flush/bin/flush-api
 
-            # Запускаем
             sudo systemctl start flush-api
 
-            # Проверяем статус
             sleep 3
             sudo systemctl is-active flush-api || (
               echo 'Deployment failed, rolling back...'
@@ -90,8 +86,76 @@ jobs:
               exit 1
             )
 
-            echo 'Deployment successful!'
+            echo ''
+            echo '======================================='
+            echo '   DEPLOY SUCCESSFUL'
+            echo '======================================='
+            echo ''
+            echo '--- Process info ---'
+            sudo systemctl status flush-api --no-pager -l
+            echo ''
+            echo '--- Last 20 lines of logs ---'
+            sudo journalctl -u flush-api -n 20 --no-pager
+            echo ''
+            echo '--- Useful commands ---'
+            echo 'View logs live:    sudo journalctl -u flush-api -f'
+            echo 'View logs (last):  sudo journalctl -u flush-api -n 50 --no-pager'
+            echo 'Service status:    sudo systemctl status flush-api'
+            echo 'Restart service:   sudo systemctl restart flush-api'
+            echo '======================================='
           ENDSSH
+
+      - name: Notify Discord - Success
+        if: success()
+        run: |
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          COMMIT_SHA="${{ github.sha }}"
+          ACTOR="${{ github.actor }}"
+          REPO="${{ github.repository }}"
+          RUN_URL="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
+
+          curl -s -X POST "https://discord.com/api/webhooks/1469429197197017089/a8kJUQnFkTaKGAW8DZbeQSkAlPvCZpbH4MKg5AZEwYRF2zOI3T-9P2tEKVjalhJ48mqR" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"✅ Deploy Successful\",
+                \"color\": 3066993,
+                \"fields\": [
+                  { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
+                  { \"name\": \"👤 Author\", \"value\": \"$ACTOR\", \"inline\": true },
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${COMMIT_SHA:0:7}\` $COMMIT_MSG\", \"inline\": false },
+                  { \"name\": \"🔗 Actions\", \"value\": \"[View Run]($RUN_URL)\", \"inline\": false }
+                ],
+                \"footer\": { \"text\": \"$REPO\" },
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+              }]
+            }"
+
+      - name: Notify Discord - Failure
+        if: failure()
+        run: |
+          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          COMMIT_SHA="${{ github.sha }}"
+          ACTOR="${{ github.actor }}"
+          REPO="${{ github.repository }}"
+          RUN_URL="https://github.com/$REPO/actions/runs/${{ github.run_id }}"
+
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"❌ Deploy Failed\",
+                \"color\": 15158332,
+                \"fields\": [
+                  { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
+                  { \"name\": \"👤 Author\", \"value\": \"$ACTOR\", \"inline\": true },
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${COMMIT_SHA:0:7}\` $COMMIT_MSG\", \"inline\": false },
+                  { \"name\": \"🔗 Actions\", \"value\": \"[View Run]($RUN_URL)\", \"inline\": false }
+                ],
+                \"footer\": { \"text\": \"$REPO\" },
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
+              }]
+            }"
 
       - name: Cleanup SSH key
         if: always()
