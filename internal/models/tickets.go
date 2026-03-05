@@ -36,7 +36,7 @@ type TicketMessage struct {
 }
 
 type TicketAction struct {
-	bun.BaseModel `bun:"table:flushproject_logs.tickets_actions"`
+	bun.BaseModel `bun:"table:flush_db_logs.tickets_actions"`
 
 	ID        uint64    `bun:"id,pk,autoincrement" json:"id"`
 	CreatedAt time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
@@ -63,7 +63,7 @@ type TicketMessageCreationInput struct {
 }
 
 type TicketAuthor struct {
-	bun.BaseModel `bun:"table:flushproject.users"`
+	bun.BaseModel `bun:"table:flush_db.users"`
 
 	UserRelation
 	LastLogin *time.Time `bun:"last_login" json:"lastLogin"`

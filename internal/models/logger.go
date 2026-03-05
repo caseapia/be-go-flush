@@ -62,6 +62,6 @@ type LogPopulate struct {
 }
 
 type LogUser struct {
-	bun.BaseModel `bun:"table:flushproject.users"`
+	bun.BaseModel `bun:"table:flush_db.users"`
 	User
 }
