@@ -18,8 +18,6 @@ func LoadRank(rankSrv *ranks.Service) fiber.Handler {
 			return c.Next()
 		}
 
-		fmt.Printf("DEBUG: User ID from locals: %d\n", user.ID)
-
 		ranksList := make([]*models.Rank, 0)
 
 		if user.StaffRank > 0 {

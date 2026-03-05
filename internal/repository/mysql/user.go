@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -36,18 +35,11 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 		Relation("ActiveBan").
 		Scan(ctx)
 	if err != nil {
-		fmt.Printf("DEBUG: Got error type: %T, value: %v\n", err, err)
-
 		if err == sql.ErrNoRows {
 			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
 	}
-
-	slog.WithData(slog.M{
-		"user": u,
-		"id":   id,
-	}).Debug("User lookup by ID repository")
 
 	if u.ActiveBan != nil {
 		if err := r.DB.NewSelect().
