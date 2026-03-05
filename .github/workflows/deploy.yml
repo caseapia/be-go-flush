@@ -64,7 +64,7 @@ jobs:
       - name: Deploy and restart service
         id: deploy_step
         run: |
-          # Выполняем SSH
+          # Выполняем SSH и записываем данные во временный файл на ранере
           ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             'bash -s' << 'ENDSSH'
@@ -76,26 +76,32 @@ jobs:
 
           if [ "${{ github.event.inputs.debug }}" = "true" ]; then
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api -debug|' /etc/systemd/system/flush-api.service
+            echo "logging_type=debug"
           else
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api|' /etc/systemd/system/flush-api.service
+            echo "logging_type=default"
           fi
 
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
           sleep 5
 
-          # Вывод данных в формате для GitHub Actions
           echo "cpu_load=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')"
           echo "mem_usage=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')"
           echo "disk_usage=$(df -h / | awk 'NR==2 {print $5}')"
           echo "uptime=$(uptime -p)"
           echo "process_mem=$(ps -u ${{ secrets.DEPLOY_USER }} -o rss,command | grep '${{ env.BINARY_NAME }}' | grep -v grep | awk '{printf "%.2f MB", $1/1024}')"
-          ENDSSH
+          ENDSSH > stats.txt
+
+          while IFS= read -r line; do
+            echo "$line" >> $GITHUB_OUTPUT
+          done < stats.txt
 
       - name: Notify Discord - Success
         if: success()
         run: |
           STATS_FIELD="📊 **CPU:** ${{ steps.deploy_step.outputs.cpu_load }} | **Disk:** ${{ steps.deploy_step.outputs.disk_usage }}\n🧠 **RAM:** ${{ steps.deploy_step.outputs.mem_usage }}\n💎 **App RAM:** ${{ steps.deploy_step.outputs.process_mem }}\n⏱️ **Uptime:** ${{ steps.deploy_step.outputs.uptime }}"
+          LOG_TYPE="${{ steps.deploy_step.outputs.logging_type }}"
 
           COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
 
@@ -107,6 +113,7 @@ jobs:
                 \"color\": 3066993,
                 \"fields\": [
                   { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
+                  { \"name\": \"🛠️ Logging Type\", \"value\": \"$LOG_TYPE\", \"inline\": true },
                   { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
                   { \"name\": \"📈 Server Status\", \"value\": \"$STATS_FIELD\", \"inline\": false },
                   { \"name\": \"📝 Commit\", \"value\": \"\`${{ github.sha }}\` $COMMIT_MSG\", \"inline\": false }
