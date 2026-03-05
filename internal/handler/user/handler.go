@@ -1,6 +1,7 @@
 package user
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/caseapia/goproject-flush/internal/models"
@@ -38,6 +39,7 @@ func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
+	fmt.Println("DEBUG: I am here")
 	userFromContext := account.GetUserFromContext(c)
 
 	user, err := h.service.GetOwnAccount(c.UserContext(), userFromContext.ID)
