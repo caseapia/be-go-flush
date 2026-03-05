@@ -97,13 +97,18 @@ jobs:
             sudo systemctl daemon-reload
             sudo systemctl start flush-api
 
-            sleep 3
-            sudo systemctl is-active flush-api || (
+            sleep 10
+            STATUS=$(sudo systemctl is-active flush-api)
+            echo "Service status: $STATUS"
+            
+            if [ "$STATUS" != "active" ]; then
               echo 'Deployment failed, rolling back...'
+              echo '--- Error logs ---'
+              sudo journalctl -u flush-api -n 30 --no-pager
               cp /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               sudo systemctl start flush-api
               exit 1
-            )
+            fi
 
             echo ''
             echo '======================================='
