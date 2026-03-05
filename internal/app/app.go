@@ -35,6 +35,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+
 )
 
 func NewApp() (*fiber.App, error) {
@@ -107,7 +108,7 @@ func NewApp() (*fiber.App, error) {
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080",
+		AllowOrigins:     "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080,https://dash.dontkillme.lol",
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Cache-Control",
 		AllowCredentials: true,

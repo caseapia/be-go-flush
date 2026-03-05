@@ -2,49 +2,97 @@ name: Deploy to Production
 
 on:
   push:
-    branches: [master]
-  workflow_dispatch:
+    branches:
+      - master
+
+env:
+  GO_VERSION: "1.22"
+  BINARY_NAME: flush-api
 
 jobs:
-  deploy:
-    name: Build & Deploy
+  test:
+    name: Test
     runs-on: ubuntu-latest
-    environment: production
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-          cache: true
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Run tests
-        run: go test ./... -race -timeout 60s
+        run: go test -v ./...
+
+  deploy:
+    name: Deploy
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -ldflags='-s -w -extldflags "-static"' \
+            -o ${{ env.BINARY_NAME }} .
 
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
         run: |
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          mkdir -p ~/.ssh
+          echo '${{ secrets.DEPLOY_SSH_KEY }}' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.DEPLOY_PORT }} \
+            -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to server
+      - name: Upload binary
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            'bash /opt/flush/deploy.sh 2>&1 | tee -a /var/log/flush/deploy.log'
+          scp -P ${{ secrets.DEPLOY_PORT }} \
+              -i ~/.ssh/deploy_key \
+              ${{ env.BINARY_NAME }} \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
 
-      - name: Verify deployment
+      - name: Deploy and restart service
         run: |
-          sleep 5
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            'sudo systemctl is-active flush'
+          ssh -p ${{ secrets.DEPLOY_PORT }} \
+              -i ~/.ssh/deploy_key \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              'bash -s' << 'ENDSSH'
+            set -e
 
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "Деплой завершился с ошибкой! Проверьте логи."
+            # Останавливаем сервис
+            sudo systemctl stop flush-api
+
+            # Бэкап старого бинарника
+            if [ -f /opt/flush/bin/flush-api ]; then
+              cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
+            fi
+
+            # Устанавливаем новый
+            mv /tmp/flush-api-new /opt/flush/bin/flush-api
+            chmod 750 /opt/flush/bin/flush-api
+
+            # Запускаем
+            sudo systemctl start flush-api
+
+            # Проверяем статус
+            sleep 3
+            sudo systemctl is-active flush-api || (
+              echo 'Deployment failed, rolling back...'
+              cp /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              sudo systemctl start flush-api
+              exit 1
+            )
+
+            echo 'Deployment successful!'
+          ENDSSH
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
