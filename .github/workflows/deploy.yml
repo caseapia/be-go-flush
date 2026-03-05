@@ -64,7 +64,8 @@ jobs:
       - name: Deploy and restart service
         id: deploy_step
         run: |
-          # Выполняем SSH и записываем данные во временный файл на ранере
+          # Выполняем SSH и записываем данные напрямую в GITHUB_OUTPUT
+          # Добавляем EOF-разделители для безопасности
           ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             'bash -s' << 'ENDSSH'
@@ -76,26 +77,24 @@ jobs:
 
           if [ "${{ github.event.inputs.debug }}" = "true" ]; then
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api -debug|' /etc/systemd/system/flush-api.service
-            echo "logging_type=debug"
+            LOG_TYPE="debug"
           else
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api|' /etc/systemd/system/flush-api.service
-            echo "logging_type=default"
+            LOG_TYPE="default"
           fi
 
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
           sleep 5
 
+          # Выводим данные в формате GITHUB_OUTPUT прямо в консоль
           echo "cpu_load=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')"
           echo "mem_usage=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')"
           echo "disk_usage=$(df -h / | awk 'NR==2 {print $5}')"
           echo "uptime=$(uptime -p)"
           echo "process_mem=$(ps -u ${{ secrets.DEPLOY_USER }} -o rss,command | grep '${{ env.BINARY_NAME }}' | grep -v grep | awk '{printf "%.2f MB", $1/1024}')"
-          ENDSSH > stats.txt
-
-          while IFS= read -r line; do
-            echo "$line" >> $GITHUB_OUTPUT
-          done < stats.txt
+          echo "logging_type=$LOG_TYPE"
+          ENDSSH | tee -a $GITHUB_OUTPUT
 
       - name: Notify Discord - Success
         if: success()
