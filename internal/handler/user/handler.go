@@ -38,13 +38,9 @@ func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	u, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	userFromContext := account.GetUserFromContext(c)
 
-	user, err := h.service.GetOwnAccount(c.UserContext(), u.ID)
+	user, err := h.service.GetOwnAccount(c.UserContext(), userFromContext.ID)
 	if err != nil {
 		slog.WithData(slog.M{
 			"e": err,
@@ -52,6 +48,12 @@ func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
 
 		return &fiber.Error{Code: 500, Message: err.Error()}
 	}
+
+	slog.WithData(slog.M{
+		"e":               err,
+		"userFromContext": userFromContext,
+		"user":            user,
+	})
 
 	return utils.Success(c, 200, user)
 }
