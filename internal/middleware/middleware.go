@@ -15,23 +15,25 @@ func LoadRank(rankSrv *ranks.Service) fiber.Handler {
 		val := c.Locals("user")
 		user, ok := val.(*models.User)
 		if !ok {
-			return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
+			return c.Next()
 		}
 
-		adminRankID := user.StaffRank
-		developerRankID := user.DeveloperRank
+		fmt.Printf("DEBUG: User ID from locals: %d\n", user.ID)
 
-		adminRank, aRankErr := rankSrv.SearchRankByID(c, adminRankID)
-		if aRankErr != nil {
-			return aRankErr
+		ranksList := make([]*models.Rank, 0)
+
+		if user.StaffRank > 0 {
+			if r, err := rankSrv.SearchRankByID(c, user.StaffRank); err == nil {
+				ranksList = append(ranksList, r)
+			}
 		}
-		developerRank, devRankErr := rankSrv.SearchRankByID(c, developerRankID)
-		if devRankErr != nil {
-			return devRankErr
+		if user.DeveloperRank > 0 {
+			if r, err := rankSrv.SearchRankByID(c, user.DeveloperRank); err == nil {
+				ranksList = append(ranksList, r)
+			}
 		}
 
-		c.Locals("rank", []*models.Rank{adminRank, developerRank})
-
+		c.Locals("rank", ranksList)
 		return c.Next()
 	}
 }
