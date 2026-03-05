@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -35,7 +36,9 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 		Relation("ActiveBan").
 		Scan(ctx)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		fmt.Printf("DEBUG: Got error type: %T, value: %v\n", err, err)
+
+		if err == sql.ErrNoRows {
 			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
