@@ -38,6 +38,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+
 )
 
 func NewApp() (*fiber.App, error) {
@@ -195,7 +196,7 @@ func NewApp() (*fiber.App, error) {
 
 	private := api.Group("/private")
 	private.Use(auth.AuthMiddleware(authSrv))
-	private.Use(middleware.UpdateLastLogin(mainRepo))
+	// private.Use(middleware.UpdateLastLogin(mainRepo))
 	private.Use(middleware.LoadRank(ranksSrv))
 
 	authHandler.RegisterPrivateRoute(private)
