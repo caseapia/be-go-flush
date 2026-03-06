@@ -25,12 +25,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Notify Discord - Start
+        run: |
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"🚀 **Deploy started**: \`${{ github.sha }}\`\\n👤 **Author**: ${{ github.actor }}\"}"
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      - name: Run tests
+        id: test_run
+        run: go test -v ./...
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       - name: Run tests
         run: go test -v ./...
+
+      - name: Notify Discord - Test Results
+        if: always()
+        run: |
+          STATUS="✅ All tests are completed"
+          COLOR=3066993
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="❌ Failed"
+            COLOR=15158332
+          fi
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🧪 Test result\",
+                \"description\": \"Status: $STATUS\",
+                \"color\": $COLOR
+              }]
+            }"
 
   deploy:
     name: Deploy
