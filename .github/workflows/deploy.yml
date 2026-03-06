@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+
   workflow_dispatch:
     inputs:
       debug:
@@ -23,6 +24,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +49,17 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
 
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Static analysis
+        run: go vet ./...
+
       - name: Run tests
         id: test_run
         run: go test -v ./...
@@ -63,6 +76,7 @@ jobs:
             COLOR=15158332
             DESC="Some tests failed. Check the action logs."
           fi
+
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "{
@@ -78,8 +92,10 @@ jobs:
     name: Deploy
     needs: test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -109,9 +125,15 @@ jobs:
           ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
             'bash -s' << 'ENDSSH'
+
           set -e
+
           sudo systemctl stop flush-api
-          [ -f /opt/flush/bin/flush-api ] && cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
+
+          if [ -f /opt/flush/bin/flush-api ]; then
+            cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
+          fi
+
           mv /tmp/flush-api-new /opt/flush/bin/flush-api
           chmod 750 /opt/flush/bin/flush-api
 
@@ -125,14 +147,50 @@ jobs:
 
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
+
           sleep 5
 
-          echo "cpu_load=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')"
-          echo "mem_usage=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')"
-          echo "disk_usage=$(df -h / | awk 'NR==2 {print $5}')"
-          echo "uptime=$(uptime -p)"
-          echo "process_mem=$(ps -u ${{ secrets.DEPLOY_USER }} -o rss,command | grep '${{ env.BINARY_NAME }}' | grep -v grep | awk '{printf "%.2f MB", $1/1024}')"
+          if ! sudo systemctl is-active --quiet flush-api; then
+            echo "Service failed. Showing logs:"
+            sudo journalctl -u flush-api -n 50 --no-pager
+
+            if [ -f /opt/flush/bin/flush-api.bak ]; then
+              echo "Rolling back..."
+              mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              sudo systemctl restart flush-api
+            fi
+
+            exit 1
+          fi
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping || true)
+
+          if [ "$STATUS" != "200" ]; then
+            echo "Health check failed ($STATUS)"
+            sudo journalctl -u flush-api -n 50 --no-pager
+
+            if [ -f /opt/flush/bin/flush-api.bak ]; then
+              echo "Rolling back..."
+              mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              sudo systemctl restart flush-api
+            fi
+
+            exit 1
+          fi
+
+          CPU_LOAD=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')
+          MEM_USAGE=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')
+          DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}')
+          UPTIME=$(uptime -p)
+          PROCESS_MEM=$(ps -o rss= -C flush-api | awk '{printf "%.2f MB", $1/1024}')
+
+          echo "cpu_load=$CPU_LOAD"
+          echo "mem_usage=$MEM_USAGE"
+          echo "disk_usage=$DISK_USAGE"
+          echo "uptime=$UPTIME"
+          echo "process_mem=$PROCESS_MEM"
           echo "logging_type=$LOG_TYPE"
+
           ENDSSH | tee -a $GITHUB_OUTPUT
 
       - name: Notify Discord - Success
