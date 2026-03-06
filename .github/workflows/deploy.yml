@@ -25,11 +25,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Notify Discord - Start
         run: |
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": \"🚀 **Deploy started**: \`${{ github.sha }}\`\\n👤 **Author**: ${{ github.actor }}\"}"
+            -d "{
+              \"embeds\": [{
+                \"title\": \"🚀 Pipeline Started\",
+                \"color\": 3447003,
+                \"description\": \"Building and testing the new changes.\",
+                \"fields\": [
+                  { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ github.sha }}\`\", \"inline\": true }
+                ]
+              }]
+            }"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -40,30 +51,26 @@ jobs:
         id: test_run
         run: go test -v ./...
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-
-      - name: Run tests
-        run: go test -v ./...
-
       - name: Notify Discord - Test Results
         if: always()
         run: |
-          STATUS="✅ All tests are completed"
-          COLOR=3066993
-          if [ "${{ job.status }}" != "success" ]; then
-            STATUS="❌ Failed"
+          if [ "${{ job.status }}" = "success" ]; then
+            TITLE="✅ Tests Passed"
+            COLOR=3066993
+            DESC="All tests completed successfully."
+          else
+            TITLE="❌ Tests Failed"
             COLOR=15158332
+            DESC="Some tests failed. Check the action logs."
           fi
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "{
               \"embeds\": [{
-                \"title\": \"🧪 Test result\",
-                \"description\": \"Status: $STATUS\",
-                \"color\": $COLOR
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESC\",
+                \"color\": $COLOR,
+                \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
               }]
             }"
 
@@ -159,7 +166,17 @@ jobs:
         run: |
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
-            -d "{\"content\": \"<@531462564304125962>\n\n❌ **Deployment Failed** in ${{ github.repository }}. [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
+            -d "{
+              \"content\": \"<@531462564304125962>\",
+              \"embeds\": [{
+                \"title\": \"❌ Deployment Failed\",
+                \"color\": 15158332,
+                \"description\": \"The deployment process encountered an error.\",
+                \"fields\": [
+                  { \"name\": \"🔗 Run Link\", \"value\": \"[View Action Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\", \"inline\": false }
+                ]
+              }]
+            }"
 
       - name: Cleanup SSH key
         if: always()
