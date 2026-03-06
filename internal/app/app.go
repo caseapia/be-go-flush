@@ -95,6 +95,10 @@ func NewApp() (*fiber.App, error) {
 	ticketsHandler := tickets.NewHandler(ticketsSrv)
 
 	app := fiber.New(fiber.Config{
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
+		Concurrency:  256 * 1024,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 

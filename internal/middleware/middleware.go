@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
@@ -77,17 +79,34 @@ func RequireFlag(flags ...string) fiber.Handler {
 }
 
 func UpdateLastLogin(repo *mysql.Repository) fiber.Handler {
+	lastUpdate := make(map[uint64]time.Time)
+	mu := sync.Mutex{}
+
 	return func(c *fiber.Ctx) error {
 		err := c.Next()
 
 		user := c.Locals("user")
 		if user != nil {
 			if u, ok := user.(*models.User); ok && u != nil {
-				if updateErr := repo.UpdateLastLogin(c, repo.DB, u.ID); updateErr != nil {
-					slog.WithData(slog.M{
-						"userID": u.ID,
-						"error":  updateErr,
-					}).Warn("Failed to update last_login")
+				mu.Lock()
+				last, exists := lastUpdate[u.ID]
+				shouldUpdate := !exists || time.Since(last) > time.Minute
+				if shouldUpdate {
+					lastUpdate[u.ID] = time.Now()
+				}
+				mu.Unlock()
+
+				if shouldUpdate {
+					go func() {
+						if updateErr := repo.UpdateLastLogin(
+							c, repo.DB, u.ID,
+						); updateErr != nil {
+							slog.WithData(slog.M{
+								"userID": u.ID,
+								"error":  updateErr,
+							}).Warn("Failed to update last_login")
+						}
+					}()
 				}
 			}
 		}
