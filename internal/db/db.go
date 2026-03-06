@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/uptrace/bun"
@@ -26,13 +27,14 @@ func Connect(dbName string, maxOpen, maxIdle int) (*bun.DB, error) {
 	)
 
 	sqlDB, err := sql.Open("mysql", dsn)
-
 	if err != nil {
 		return nil, err
 	}
 
 	sqlDB.SetMaxOpenConns(maxOpen)
 	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetConnMaxLifetime(time.Minute * 3)
+	sqlDB.SetConnMaxIdleTime(time.Minute * 1)
 
 	if err := sqlDB.Ping(); err != nil {
 		return nil, err

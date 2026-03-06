@@ -66,14 +66,6 @@ func NewApp() (*fiber.App, error) {
 	mainRepo := mysqlRepo.NewRepository(dbs.Main)
 	logsRepo := mysqlRepo.NewRepository(dbs.Logs)
 
-	mainRepo.DB.SetMaxOpenConns(25)
-	mainRepo.DB.SetMaxIdleConns(25)
-	mainRepo.DB.SetConnMaxLifetime(5 * time.Minute)
-
-	logsRepo.DB.SetMaxOpenConns(10)
-	logsRepo.DB.SetMaxIdleConns(10)
-	logsRepo.DB.SetConnMaxLifetime(5 * time.Minute)
-
 	if *migrateFlag {
 		if err := mysql.RunMigrations(dbs.Main, mysql.MainModels); err != nil {
 			log.Fatal(err)
