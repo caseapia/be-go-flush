@@ -35,7 +35,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
-
 )
 
 func NewApp() (*fiber.App, error) {
@@ -46,7 +45,9 @@ func NewApp() (*fiber.App, error) {
 	config.LoadEnv()
 	setupLogger()
 
+	fmt.Println("DEBUG: DISCORD_PRODUCTION_REDIRECT_URI =", os.Getenv("DISCORD_PRODUCTION_REDIRECT_URI"))
 	cfg := config.Load()
+	fmt.Println("DEBUG: Config value =", cfg.DiscordProductionRedirectURI)
 
 	discordClient := discord.NewClient(
 		cfg.DiscordClientID,
