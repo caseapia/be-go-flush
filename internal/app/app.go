@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -45,9 +46,7 @@ func NewApp() (*fiber.App, error) {
 	config.LoadEnv()
 	setupLogger()
 
-	fmt.Println("DEBUG: DISCORD_PRODUCTION_REDIRECT_URI =", os.Getenv("DISCORD_PRODUCTION_REDIRECT_URI"))
 	cfg := config.Load()
-	fmt.Println("DEBUG: Config value =", cfg.DiscordProductionRedirectURI)
 
 	discordClient := discord.NewClient(
 		cfg.DiscordClientID,
@@ -107,6 +106,10 @@ func NewApp() (*fiber.App, error) {
 			})
 		},
 	})
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080,https://dash.dontkillme.lol",
