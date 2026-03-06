@@ -9,6 +9,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/mysqldialect"
+	"github.com/uptrace/bun/extra/bundebug"
 )
 
 type Databases struct {
@@ -40,7 +41,13 @@ func Connect(dbName string, maxOpen, maxIdle int) (*bun.DB, error) {
 		return nil, err
 	}
 
-	return bun.NewDB(sqlDB, mysqldialect.New()), nil
+	db := bun.NewDB(sqlDB, mysqldialect.New())
+	db.AddQueryHook(bundebug.NewQueryHook(
+		bundebug.WithEnabled(true),
+		bundebug.FromEnv("BUNDEBUG"),
+	))
+
+	return db, nil
 }
 
 func NewDatabases() (*Databases, error) {

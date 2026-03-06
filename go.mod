@@ -13,7 +13,11 @@ require (
 
 require golang.org/x/crypto v0.48.0
 
-require github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+require (
+	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/fatih/color v1.18.0 // indirect
+	github.com/uptrace/bun/extra/bundebug v1.2.18 // indirect
+)
 
 require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
