@@ -1,6 +1,8 @@
 package account
 
 import (
+	"fmt"
+
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/gofiber/fiber/v2"
 )
@@ -19,6 +21,24 @@ func GetUserFromContext(c *fiber.Ctx) *models.User {
 }
 
 func GetUserRanksFromContext(c *fiber.Ctx) (staffRank *models.Rank, developerRank *models.Rank) {
-	ranks := c.Locals("rank").([]*models.Rank)
-	return ranks[0], ranks[1]
+	val := c.Locals("rank")
+	if val == nil {
+		return nil, nil
+	}
+
+	ranks, ok := val.([]*models.Rank)
+	if !ok || len(ranks) == 0 {
+		fmt.Println(ranks)
+
+		return nil, nil
+	}
+
+	if len(ranks) >= 1 {
+		staffRank = ranks[0]
+	}
+	if len(ranks) >= 2 {
+		developerRank = ranks[1]
+	}
+
+	return staffRank, developerRank
 }

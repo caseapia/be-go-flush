@@ -10,6 +10,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
+
 )
 
 func LoadRank(rankSrv *ranks.Service) fiber.Handler {

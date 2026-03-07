@@ -208,15 +208,6 @@ func (r *Repository) CreateTicketMessage(ctx context.Context, tx bun.IDB, entry 
 		return statusErr
 	}
 
-	messages, err := r.PopulateTicketMessages(ctx, entry.TicketID)
-	if err != nil {
-		return err
-	}
-
-	if messages == nil {
-		messages = make([]models.TicketMessage, 0)
-	}
-
 	return nil
 }
 

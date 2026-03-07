@@ -231,8 +231,6 @@ func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket
 		return nil, fiber.NewError(fiber.StatusForbidden, fmt.Sprintf("this ticket already handled by %s and you cannot answer here", ticket.Handler.Name))
 	}
 
-	var updatedTicket *models.TicketResponse
-
 	var handlerID *uint64
 	if ticket.Handler != nil {
 		handlerID = &ticket.Handler.ID
@@ -249,13 +247,13 @@ func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket
 			return err
 		}
 
-		updatedTicket, err = s.PopulateTicket(ctx, ticket.ID, user)
-		if err != nil {
-			return err
-		}
-
 		return nil
 	})
+
+	updatedTicket, err := s.PopulateTicket(ctx, ticket.ID, user)
+	if err != nil {
+		return nil, err
+	}
 
 	return updatedTicket, nil
 }

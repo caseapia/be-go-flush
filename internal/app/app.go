@@ -14,6 +14,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/clients/discord"
 	database "github.com/caseapia/goproject-flush/internal/db"
 	"github.com/caseapia/goproject-flush/internal/handler/auth"
+	"github.com/caseapia/goproject-flush/internal/handler/changelog"
 	"github.com/caseapia/goproject-flush/internal/handler/invite"
 	"github.com/caseapia/goproject-flush/internal/handler/logger"
 	"github.com/caseapia/goproject-flush/internal/handler/ranks"
@@ -25,6 +26,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
 	authService "github.com/caseapia/goproject-flush/internal/service/auth"
+	changelogService "github.com/caseapia/goproject-flush/internal/service/changelog"
 	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
 	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
 	ranksService "github.com/caseapia/goproject-flush/internal/service/ranks"
@@ -38,7 +40,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
-
 )
 
 func NewApp() (*fiber.App, error) {
@@ -85,6 +86,7 @@ func NewApp() (*fiber.App, error) {
 	inviteSrv := inviteService.NewService(*mainRepo, *loggerSrv)
 	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv, discordClient, cfg)
 	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
+	changelogSrv := changelogService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 
 	badgesHandler := badges.NewHandler(badgesSrv)
 	authHandler := auth.NewHandler(authSrv, inviteSrv)
@@ -94,6 +96,7 @@ func NewApp() (*fiber.App, error) {
 	ranksHandler := ranks.NewHandler(ranksSrv)
 	notifyHandler := notifications.NewHandler(notifySrv)
 	ticketsHandler := tickets.NewHandler(ticketsSrv)
+	changelogHandler := changelog.NewHandler(changelogSrv)
 
 	app := fiber.New(fiber.Config{
 		ReadTimeout:  10 * time.Second,
@@ -208,6 +211,7 @@ func NewApp() (*fiber.App, error) {
 	notifyHandler.RegisterRoutes(private)
 	ticketsHandler.RegisterRoutes(private)
 	badgesHandler.RegisterRoutes(private)
+	changelogHandler.RegisterRoutes(private)
 
 	return app, nil
 }
