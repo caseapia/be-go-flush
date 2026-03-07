@@ -40,6 +40,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
+
 )
 
 func NewApp() (*fiber.App, error) {
@@ -103,6 +104,7 @@ func NewApp() (*fiber.App, error) {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  30 * time.Second,
 		Concurrency:  256 * 1024,
+		ProxyHeader:  fiber.HeaderXForwardedFor,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 
