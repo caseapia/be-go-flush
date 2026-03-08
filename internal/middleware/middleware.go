@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -8,9 +9,9 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
-
 )
 
 func LoadRank(rankSrv *ranks.Service) fiber.Handler {
@@ -80,36 +81,63 @@ func RequireFlag(flags ...string) fiber.Handler {
 }
 
 func UpdateLastLogin(repo *mysql.Repository) fiber.Handler {
-	lastUpdate := make(map[uint64]time.Time)
-	mu := sync.Mutex{}
+	type cacheEntry struct {
+		updatedAt time.Time
+	}
+
+	var (
+		mu    sync.Mutex
+		cache = make(map[uint64]cacheEntry)
+	)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			cutoff := time.Now().Add(-5 * time.Minute)
+			mu.Lock()
+
+			for id, e := range cache {
+				if e.updatedAt.Before(cutoff) {
+					delete(cache, id)
+				}
+			}
+
+			mu.Unlock()
+		}
+	}()
 
 	return func(c *fiber.Ctx) error {
 		err := c.Next()
 
-		user := c.Locals("user")
-		if user != nil {
-			if u, ok := user.(*models.User); ok && u != nil {
-				mu.Lock()
-				last, exists := lastUpdate[u.ID]
-				shouldUpdate := !exists || time.Since(last) > time.Minute
-				if shouldUpdate {
-					lastUpdate[u.ID] = time.Now()
-				}
-				mu.Unlock()
+		u := account.GetUserFromContext(c)
+		if u == nil {
+			return err
+		}
 
-				if shouldUpdate {
-					go func() {
-						if updateErr := repo.UpdateLastLogin(
-							c, repo.DB, u.ID,
-						); updateErr != nil {
-							slog.WithData(slog.M{
-								"userID": u.ID,
-								"error":  updateErr,
-							}).Warn("Failed to update last_login")
-						}
-					}()
+		mu.Lock()
+		shouldUpdate := time.Since(cache[u.ID].updatedAt) > time.Minute
+		if shouldUpdate {
+			cache[u.ID] = cacheEntry{updatedAt: time.Now()}
+		}
+		mu.Unlock()
+
+		if shouldUpdate {
+			userID := u.ID
+			ip := c.IP()
+
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				if updateErr := repo.UpdateLastLogin(ctx, repo.DB, userID, ip); updateErr != nil {
+					slog.WithData(slog.M{
+						"userID": userID,
+						"error":  updateErr,
+					}).Warn("Failed to update last_login")
 				}
-			}
+			}()
 		}
 
 		return err

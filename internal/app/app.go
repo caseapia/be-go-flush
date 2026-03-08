@@ -40,7 +40,6 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
-
 )
 
 func NewApp() (*fiber.App, error) {
@@ -58,9 +57,6 @@ func NewApp() (*fiber.App, error) {
 		cfg.DiscordClientSecret,
 		cfg.DiscordRedirectURI(),
 	)
-
-	fmt.Println("CLIENT_ID:", cfg.DiscordClientID)
-	fmt.Println("REDIRECT:", cfg.DiscordRedirectURI())
 
 	dbs, err := database.NewDatabases()
 	if err != nil {
@@ -130,7 +126,7 @@ func NewApp() (*fiber.App, error) {
 	})
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000,https://fe-go-flush.vercel.app,http://localhost:8080,https://dash.dontkillme.lol",
+		AllowOrigins:     "http://localhost:3000, http://localhost:8080, https://fe-go-flush.vercel.app, https://dash.dontkillme.lol",
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, Cache-Control",
 		AllowCredentials: true,
@@ -201,7 +197,7 @@ func NewApp() (*fiber.App, error) {
 
 	private := api.Group("/private")
 	private.Use(auth.AuthMiddleware(authSrv))
-	// private.Use(middleware.UpdateLastLogin(mainRepo))
+	private.Use(middleware.UpdateLastLogin(mainRepo))
 	private.Use(middleware.LoadRank(ranksSrv))
 
 	authHandler.RegisterPrivateRoute(private)

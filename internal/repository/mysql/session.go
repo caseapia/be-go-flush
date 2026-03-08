@@ -31,7 +31,7 @@ func (r *Repository) RevokeSession(ctx context.Context, tx bun.IDB, sessionID st
 	return err
 }
 
-func (r *Repository) GetSessionByHash(ctx context.Context, hash string) (*models.Session, error) {
+func (r *Repository) SearchSessionByRefreshHash(ctx context.Context, hash string) (*models.Session, error) {
 	session := new(models.Session)
 	err := r.DB.NewSelect().
 		Model(session).
@@ -42,6 +42,18 @@ func (r *Repository) GetSessionByHash(ctx context.Context, hash string) (*models
 		return nil, err
 	}
 	return session, nil
+}
+
+func (r *Repository) SearchSessionsByUser(ctx context.Context, tx bun.IDB, userID uint64) ([]models.Session, error) {
+	sessions := make([]models.Session, 0)
+
+	err := tx.NewSelect().
+		Model(&sessions).
+		Where("user_id = ?", userID).
+		Limit(10).
+		Scan(ctx)
+
+	return sessions, err
 }
 
 func (r *Repository) CleanupExpiredSessions(ctx context.Context, tx bun.IDB, userID uint64) error {

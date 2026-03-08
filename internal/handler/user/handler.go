@@ -38,9 +38,9 @@ func (h *Handler) SearchAllUsers(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetOwnAccount(c *fiber.Ctx) error {
-	userFromContext := account.GetUserFromContext(c)
+	sender := account.GetUserFromContext(c)
 
-	user, err := h.service.GetOwnAccount(c.UserContext(), userFromContext.ID)
+	user, err := h.service.GetOwnAccount(c.UserContext(), sender.ID)
 	if err != nil {
 		slog.WithData(slog.M{
 			"e": err,
@@ -115,15 +115,25 @@ func (h *Handler) ChangeUserName(c *fiber.Ctx) error {
 	return utils.Success(c, 200, u)
 }
 
+func (h *Handler) SearchSessionsByUser(c *fiber.Ctx) error {
+	userID, _ := account.GetUserId(c)
+	sender := account.GetUserFromContext(c)
+
+	sessions, err := h.auth.SearchSessionsByUser(c, *sender, userID)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, fiber.Map{
+		"sessions": sessions,
+	})
+}
+
 // ! Admin actions
 func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	rank, err := h.rank.SearchRankByID(c, sender.StaffRank)
 
@@ -145,11 +155,7 @@ func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid user ID "+err.Error())
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	user, err := h.service.SearchUser(c.Context(), sender.ID, userID)
 	if err != nil {
@@ -162,18 +168,14 @@ func (h *Handler) GetUserPrivate(c *fiber.Ctx) error {
 func (h *Handler) BanUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.BanRequest
 	if err := c.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: "invalid request"}
 	}
 
-	ban, err := h.service.BanUser(c.UserContext(), admin.ID, uint64(id), input.UnbanDate, input.Reason)
+	ban, err := h.service.BanUser(c.UserContext(), sender.ID, uint64(id), input.UnbanDate, input.Reason)
 	if err != nil {
 		return err
 	}
@@ -184,13 +186,9 @@ func (h *Handler) BanUser(c *fiber.Ctx) error {
 func (h *Handler) UnbanUser(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
-	unban, err := h.service.UnbanUser(c.UserContext(), admin.ID, uint64(id))
+	unban, err := h.service.UnbanUser(c.UserContext(), sender.ID, uint64(id))
 	if err != nil {
 		return err
 	}
@@ -199,11 +197,7 @@ func (h *Handler) UnbanUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateUser(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.CreateUserRequest
 
@@ -211,7 +205,7 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 400, Message: "invalid request"}
 	}
 
-	newUser, err := h.service.CreateUser(c, admin.ID, input.Name, input.Email, input.Password)
+	newUser, err := h.service.CreateUser(c, sender.ID, input.Name, input.Email, input.Password)
 	if err != nil {
 		return err
 	}
@@ -220,15 +214,11 @@ func (h *Handler) CreateUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) DeleteUser(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	deleted, err := h.service.DeleteUser(c.UserContext(), admin.ID, uint64(id))
+	deleted, err := h.service.DeleteUser(c.UserContext(), sender.ID, uint64(id))
 	if err != nil {
 		return err
 	}
@@ -237,15 +227,11 @@ func (h *Handler) DeleteUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) RestoreUser(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	restored, err := h.service.RestoreUser(c.UserContext(), admin.ID, uint64(id))
+	restored, err := h.service.RestoreUser(c.UserContext(), sender.ID, uint64(id))
 	if err != nil {
 		return err
 	}
@@ -254,11 +240,7 @@ func (h *Handler) RestoreUser(c *fiber.Ctx) error {
 }
 
 func (h *Handler) SetStaffRank(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	userID, err := c.ParamsInt("id")
 	if err != nil {
@@ -275,7 +257,7 @@ func (h *Handler) SetStaffRank(c *fiber.Ctx) error {
 
 	u, err := h.service.SetStaffRank(
 		c.Context(),
-		admin.ID,
+		sender.ID,
 		uint64(userID),
 		input.Status,
 	)
@@ -288,11 +270,7 @@ func (h *Handler) SetStaffRank(c *fiber.Ctx) error {
 }
 
 func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	admin, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	userID, err := c.ParamsInt("id")
 	if err != nil {
@@ -309,7 +287,7 @@ func (h *Handler) SetDeveloperRank(c *fiber.Ctx) error {
 
 	u, err := h.service.SetDeveloperRank(
 		c.Context(),
-		admin.ID,
+		sender.ID,
 		uint64(userID),
 		input.Status,
 	)
@@ -348,11 +326,7 @@ func (h *Handler) EditUserFlags(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.EditUserFlagsRequest
 	if err := c.BodyParser(&input); err != nil {
@@ -373,11 +347,7 @@ func (h *Handler) EditUserBadges(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.EditUserBadgesRequest
 	if err := c.BodyParser(&input); err != nil {
@@ -398,11 +368,7 @@ func (h *Handler) ResetUserSensetiveData(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	sender := account.GetUserFromContext(c)
 
 	u, err := h.service.ResetUserSensitiveData(c, sender.ID, uint64(userID))
 	if err != nil {
@@ -418,11 +384,7 @@ func (h *Handler) ForceUnlinkUserDiscord(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid user id")
 	}
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	sender := account.GetUserFromContext(c)
 
 	u, err := h.auth.UnlinkDiscord(c.UserContext(), sender, uint64(userID))
 	if err != nil {
@@ -433,12 +395,6 @@ func (h *Handler) ForceUnlinkUserDiscord(c *fiber.Ctx) error {
 }
 
 func (h *Handler) PopulateBanList(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	_, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
-
 	b, err := h.service.PopulateBanList(c.UserContext())
 	if err != nil {
 		return err

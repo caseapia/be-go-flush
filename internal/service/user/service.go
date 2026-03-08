@@ -336,11 +336,7 @@ func (s *Service) UnbanUser(ctx context.Context, adminID, userID uint64) (*model
 }
 
 func (s *Service) CreateUser(ctx *fiber.Ctx, adminID uint64, name, email, password string) (*models.User, error) {
-	existing, err := s.repo.SearchUserByName(ctx.UserContext(), name)
-	if err != nil {
-		return nil, err
-	}
-
+	existing, _ := s.repo.SearchUserByName(ctx.UserContext(), name)
 	if existing != nil {
 		return nil, fiber.ErrBadRequest
 	}

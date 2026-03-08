@@ -1,8 +1,9 @@
 package config
 
 import (
-	"log"
 	"os"
+
+	"github.com/gookit/slog"
 )
 
 type Config struct {
@@ -29,19 +30,19 @@ func Load() *Config {
 
 func validate(cfg *Config) {
 	if cfg.DiscordClientID == "" {
-		log.Fatal("DISCORD_CLIENT_ID is not set")
+		slog.Error("DISCORD_CLIENT_ID is not set")
 	}
 	if cfg.DiscordClientSecret == "" {
-		log.Fatal("DISCORD_CLIENT_SECRET is not set")
+		slog.Error("DISCORD_CLIENT_SECRET is not set")
 	}
 	if cfg.DiscordLocalRedirectURI == "" {
-		log.Fatal("DISCORD_LOCAL_REDIRECT_URI is not set")
+		slog.Error("DISCORD_LOCAL_REDIRECT_URI is not set")
 	}
 	if cfg.DiscordProductionRedirectURI == "" {
-		log.Fatal("DISCORD_PRODUCTION_REDIRECT_URI is not set")
+		slog.Error("DISCORD_PRODUCTION_REDIRECT_URI is not set")
 	}
 	if cfg.AppMode == "" {
-		log.Fatal("APP_MODE is not set")
+		slog.Error("APP_MODE is not set")
 	}
 }
 

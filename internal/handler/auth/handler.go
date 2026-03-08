@@ -8,10 +8,10 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/caseapia/goproject-flush/internal/service/invite"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
-
 )
 
 type Handler struct {
@@ -122,11 +122,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Logout(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	user, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	sessionIDVal := c.Locals("session_id")
 
@@ -135,10 +131,10 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 		return &fiber.Error{Code: 401, Message: "invalid session"}
 	}
 
-	status := h.authService.Logout(c.Context(), user, sessionID)
+	status := h.authService.Logout(c.Context(), sender, sessionID)
 
 	slog.WithData(slog.M{
-		"user": user.ID,
+		"user": sender.ID,
 	}).Debug("User logouted successfully")
 
 	return utils.Success(c, 200, status)
@@ -157,7 +153,7 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 		c.IP(),
 	)
 	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid refresh token")
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
 	c.Cookie(&fiber.Cookie{
@@ -199,11 +195,7 @@ func (h *Handler) DiscordRedirect(c *fiber.Ctx) error {
 }
 
 func (h *Handler) DiscordCallback(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	user, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid user context")
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.DiscordTokenRequest
 	if err := c.BodyParser(&input); err != nil {
@@ -214,7 +206,7 @@ func (h *Handler) DiscordCallback(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "missing code or state")
 	}
 
-	linkedUser, err := h.authService.LinkDiscord(c, user.ID, input.Code, input.State, input.SavedState)
+	linkedUser, err := h.authService.LinkDiscord(c, sender.ID, input.Code, input.State, input.SavedState)
 	if err != nil {
 		return err
 	}
@@ -226,13 +218,9 @@ func (h *Handler) DiscordCallback(c *fiber.Ctx) error {
 }
 
 func (h *Handler) DiscordUnlink(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	user, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid user context")
-	}
+	sender := account.GetUserFromContext(c)
 
-	unlinkedUser, err := h.authService.UnlinkDiscord(c.UserContext(), user, user.ID)
+	unlinkedUser, err := h.authService.UnlinkDiscord(c.UserContext(), sender, sender.ID)
 	if err != nil {
 		return err
 	}

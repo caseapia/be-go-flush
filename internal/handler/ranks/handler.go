@@ -6,6 +6,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/ranks"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -32,11 +33,7 @@ func (r *Handler) GetRanksList(c *fiber.Ctx) error {
 }
 
 func (r *Handler) CreateRank(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	var input models.CreateRankRequest
 
@@ -58,11 +55,7 @@ func (r *Handler) CreateRank(c *fiber.Ctx) error {
 }
 
 func (r *Handler) DeleteRank(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	rankID, err := c.ParamsInt("id")
 	if err != nil {
@@ -78,15 +71,11 @@ func (r *Handler) DeleteRank(c *fiber.Ctx) error {
 }
 
 func (h *Handler) EditRank(c *fiber.Ctx) error {
+	sender := account.GetUserFromContext(c)
+
 	rankID, err := c.ParamsInt("id")
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid rank id")
-	}
-
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
 	}
 
 	var input models.Rank

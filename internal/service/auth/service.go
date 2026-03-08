@@ -13,6 +13,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/caseapia/goproject-flush/pkg/utils/hash"
 	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
@@ -100,7 +101,7 @@ func (s *Service) Login(ctx *fiber.Ctx, login, password, userAgent, ip string) (
 			return err
 		}
 
-		if err := s.repository.UpdateLastLogin(ctx, tx, user.ID); err != nil {
+		if err := s.repository.UpdateLastLogin(ctx.UserContext(), tx, user.ID, ip); err != nil {
 			return err
 		}
 
@@ -116,7 +117,7 @@ func (s *Service) Login(ctx *fiber.Ctx, login, password, userAgent, ip string) (
 func (s *Service) Refresh(ctx context.Context, refreshToken, useragent, ip string) (string, string, error) {
 	refreshHash := hash.HashToken(refreshToken)
 
-	session, err := s.repository.GetSessionByHash(ctx, refreshHash)
+	session, err := s.repository.SearchSessionByRefreshHash(ctx, refreshHash)
 	if err != nil || session.Revoked || session.ExpiresAt.Before(time.Now()) {
 		return "", "", errors.New("invalid or expired session")
 	}
@@ -126,28 +127,34 @@ func (s *Service) Refresh(ctx context.Context, refreshToken, useragent, ip strin
 		return "", "", err
 	}
 
-	newRefreshToken, err := GenerateRefreshToken()
-	if err != nil {
-		return "", "", err
-	}
-	session.RefreshHash = hash.HashToken(newRefreshToken)
-	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
-
-	var accessToken string
-	err = s.repository.WithTx(ctx, func(tx bun.Tx) error {
+	var newAccessToken string
+	var newRefreshToken string
+	var txError error
+	txError = s.repository.WithTx(ctx, func(tx bun.Tx) error {
 		if err := s.repository.UpdateSession(ctx, tx, session); err != nil {
 			return err
 		}
 
-		accessToken, err = utils.GenerateAccessToken(user.ID, session.ID, user.TokenVersion)
+		newRefreshToken, err = GenerateRefreshToken()
 		if err != nil {
 			return err
 		}
 
+		newAccessToken, err = utils.GenerateAccessToken(user.ID, session.ID, user.TokenVersion)
+		if err != nil {
+			return err
+		}
+
+		session.RefreshHash = hash.HashToken(newRefreshToken)
+		session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
+
 		return nil
 	})
+	if txError != nil {
+		return "", "", txError
+	}
 
-	return accessToken, newRefreshToken, nil
+	return newAccessToken, newRefreshToken, nil
 }
 
 func (s *Service) Logout(ctx context.Context, user *models.User, sessionID string) error {
@@ -185,4 +192,37 @@ func (s *Service) ParseJWT(tokenString string) (*models.User, *utils.Claims, err
 	}
 
 	return user, claims, nil
+}
+
+func (s *Service) SearchSessionsByUser(ctx *fiber.Ctx, sender models.User, userID uint64) ([]models.Session, error) {
+	staffRank, developerRank := account.GetUserRanksFromContext(ctx)
+	user, err := s.repository.SearchByID(ctx.UserContext(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// conditions
+	if sender.ID != user.ID && !(staffRank.HasFlag("SENIOR") || developerRank.HasFlag("DEV")) {
+		return nil, &fiber.Error{Code: 403, Message: "you are not authorized to use this function"}
+	}
+
+	var txErr error
+	var sessions []models.Session
+	s.repository.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		sessions, txErr = s.repository.SearchSessionsByUser(ctx.UserContext(), tx, user.ID)
+		if txErr != nil {
+			return txErr
+		}
+
+		if sender.ID != user.ID {
+			s.logger.Log(ctx.UserContext(), enums.StaffCommonLogger, &sender.ID, &user.ID, enums.CheckedSessions)
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	return sessions, txErr
 }

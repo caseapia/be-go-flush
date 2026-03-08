@@ -3,9 +3,9 @@ package invite
 import (
 	"strconv"
 
-	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/invite"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
@@ -21,11 +21,7 @@ func NewHandler(s *invite.Service) *Handler {
 }
 
 func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	_, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	_ = account.GetUserFromContext(c)
 
 	invites, err := h.service.GetInviteCodes(c.UserContext())
 	if err != nil {
@@ -39,13 +35,9 @@ func (h *Handler) GetInviteCodes(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateInvite(c *fiber.Ctx) error {
-	val := c.Locals("user")
-	user, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
-	newInvite, err := h.service.CreateInvite(c.Context(), user.ID)
+	newInvite, err := h.service.CreateInvite(c.Context(), sender.ID)
 	if err != nil {
 		slog.WithData(slog.M{
 			"error": err,
@@ -59,11 +51,7 @@ func (h *Handler) CreateInvite(c *fiber.Ctx) error {
 func (h *Handler) DeleteInvite(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	val := c.Locals("user")
-	sender, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
 	err := h.service.DeleteInvite(c.Context(), sender.ID, uint64(id))
 	if err != nil {

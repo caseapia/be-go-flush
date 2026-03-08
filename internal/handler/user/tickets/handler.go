@@ -6,6 +6,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/user/tickets"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -18,13 +19,9 @@ func NewHandler(s *tickets.Service) *Handler {
 }
 
 func (h *Handler) SearchTickets(ctx *fiber.Ctx) error {
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
-	tickets, _, err := h.service.SearchTickets(ctx.UserContext(), u)
+	tickets, _, err := h.service.SearchTickets(ctx.UserContext(), sender)
 	if err != nil {
 		return err
 	}
@@ -35,13 +32,9 @@ func (h *Handler) SearchTickets(ctx *fiber.Ctx) error {
 func (h *Handler) PopulateTicket(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	uVal := c.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(c)
 
-	ticket, ticketErr := h.service.PopulateTicket(c.UserContext(), uint64(id), u)
+	ticket, ticketErr := h.service.PopulateTicket(c.UserContext(), uint64(id), sender)
 	if ticketErr != nil {
 		return ticketErr
 	}
@@ -50,13 +43,9 @@ func (h *Handler) PopulateTicket(c *fiber.Ctx) error {
 }
 
 func (h *Handler) PopulateAllUserTickets(ctx *fiber.Ctx) error {
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
-	tickets, err := h.service.PopulateAllUserTickets(ctx.UserContext(), u.ID)
+	tickets, err := h.service.PopulateAllUserTickets(ctx.UserContext(), sender.ID)
 	if err != nil {
 		return err
 	}
@@ -65,18 +54,14 @@ func (h *Handler) PopulateAllUserTickets(ctx *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateTicket(ctx *fiber.Ctx) error {
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.TicketCreationInput
 	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
 		return ticketErr
 	}
 
-	ticket, ticketErr := h.service.CreateTicket(ctx.UserContext(), *u, input.Title, input.Category, input.FirstMessage)
+	ticket, ticketErr := h.service.CreateTicket(ctx.UserContext(), *sender, input.Title, input.Category, input.FirstMessage)
 	if ticketErr != nil {
 		return ticketErr
 	}
@@ -85,18 +70,14 @@ func (h *Handler) CreateTicket(ctx *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateTicketMessage(ctx *fiber.Ctx) error {
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.TicketMessageCreationInput
 	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
 		return ticketErr
 	}
 
-	ticket, ticketErr := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, u, input.Content)
+	ticket, ticketErr := h.service.CreateTicketMessage(ctx.UserContext(), &input.Ticket, sender, input.Content)
 	if ticketErr != nil {
 		return ticketErr
 	}
@@ -107,13 +88,9 @@ func (h *Handler) CreateTicketMessage(ctx *fiber.Ctx) error {
 func (h *Handler) TicketAssignment(ctx *fiber.Ctx) error {
 	id, _ := strconv.Atoi(ctx.Params("id"))
 
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
-	ticket, ticketErr := h.service.TicketAssignment(ctx.UserContext(), uint64(id), u)
+	ticket, ticketErr := h.service.TicketAssignment(ctx.UserContext(), uint64(id), sender)
 	if ticketErr != nil {
 		return ticketErr
 	}
@@ -124,13 +101,9 @@ func (h *Handler) TicketAssignment(ctx *fiber.Ctx) error {
 func (h *Handler) CloseTicket(ctx *fiber.Ctx) error {
 	id, _ := strconv.Atoi(ctx.Params("id"))
 
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
-	ticket, ticketErr := h.service.CloseTicket(ctx.UserContext(), uint64(id), *u)
+	ticket, ticketErr := h.service.CloseTicket(ctx.UserContext(), uint64(id), *sender)
 	if ticketErr != nil {
 		return ticketErr
 	}
@@ -141,18 +114,14 @@ func (h *Handler) CloseTicket(ctx *fiber.Ctx) error {
 func (h *Handler) ChangeCategory(ctx *fiber.Ctx) error {
 	id, _ := strconv.Atoi(ctx.Params("id"))
 
-	uVal := ctx.Locals("user")
-	u, ok := uVal.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.TicketCategoryChangingInput
 	if ticketErr := ctx.BodyParser(&input); ticketErr != nil {
 		return ticketErr
 	}
 
-	ticket, ticketErr := h.service.ChangeTicketCategory(ctx.UserContext(), uint64(id), input.NewCategory, u)
+	ticket, ticketErr := h.service.ChangeTicketCategory(ctx.UserContext(), uint64(id), input.NewCategory, sender)
 	if ticketErr != nil {
 		return ticketErr
 	}

@@ -19,9 +19,9 @@ func NewHandler(service *changelog.Service) *Handler {
 }
 
 func (h *Handler) PopulateChangelog(ctx *fiber.Ctx) error {
-	user := account.GetUserFromContext(ctx)
+	sender := account.GetUserFromContext(ctx)
 
-	changelogs, err := h.service.PopulateChangelog(ctx, user)
+	changelogs, err := h.service.PopulateChangelog(ctx, sender)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}
@@ -30,14 +30,14 @@ func (h *Handler) PopulateChangelog(ctx *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateChangelog(ctx *fiber.Ctx) error {
-	user := account.GetUserFromContext(ctx)
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.ChangelogCreationRequest
 	if err := ctx.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}
 
-	changelogs, err := h.service.CreateChangelog(ctx, input, user)
+	changelogs, err := h.service.CreateChangelog(ctx, input, sender)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
 	}

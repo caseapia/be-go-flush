@@ -39,13 +39,6 @@ func (s *Service) PopulateChangelog(ctx *fiber.Ctx, user *models.User) ([]models
 		hasStaffRole = true
 	}
 
-	// slog.WithData(slog.M{
-	// 	"staffRank":     staffRank,
-	// 	"developerRank": developerRank,
-	// 	"isStaffUser":   isStaffUser,
-	// 	"hasStaffRole":  hasStaffRole,
-	// }).Debug("populate change log")
-
 	canViewStaffChangelog := isStaffUser || hasStaffRole
 
 	var err error

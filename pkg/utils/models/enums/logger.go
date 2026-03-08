@@ -56,4 +56,5 @@ const (
 	LinkDiscord            LoggerAction = "linked his discord"
 	UnlinkDiscord          LoggerAction = "unlinked his discord"
 	ForceUnlinkUserDiscord LoggerAction = "force unlinked discord"
+	CheckedSessions        LoggerAction = "just checked sessions"
 )

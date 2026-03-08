@@ -16,7 +16,7 @@ type User struct {
 	CreatedAt time.Time        `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
 	UpdatedAt time.Time        `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
 	LastLogin *time.Time       `bun:"last_login" json:"lastLogin"`
-	BadgeIDs  []uint64         `bun:"badges,type:json" json:"-"`
+	BadgeIDs  *[]uint64        `bun:"badges,type:json" json:"-"`
 	Badges    []Badge          `bun:"-" json:"badges"`
 	Status    enums.UserStatus `bun:"status" json:"status"`
 
@@ -86,14 +86,14 @@ type Notification struct {
 type Session struct {
 	bun.BaseModel `bun:"table:sessions"`
 
-	ID          string    `bun:"id,unique"`
-	UserID      uint64    `bun:"user_id"`
-	RefreshHash string    `bun:"refresh_hash"`
-	UserAgent   string    `bun:"user_agent"`
-	IPLast      string    `bun:"ip_last"`
-	Revoked     bool      `bun:"revoked"`
-	ExpiresAt   time.Time `bun:"expires_at"`
-	CreatedAt   time.Time `bun:"created_at"`
+	ID          string    `bun:"id,pk,unique" json:"-"`
+	UserID      uint64    `bun:"user_id" json:"-"`
+	RefreshHash string    `bun:"refresh_hash" json:"-"`
+	UserAgent   string    `bun:"user_agent" json:"user_agent"`
+	IPLast      string    `bun:"ip_last" json:"ip"`
+	Revoked     bool      `bun:"revoked" json:"is_revoked"`
+	ExpiresAt   time.Time `bun:"expires_at" json:"expires_at"`
+	CreatedAt   time.Time `bun:"created_at" json:"created_at"`
 }
 
 // & Requests

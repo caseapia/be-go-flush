@@ -6,7 +6,9 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
+
 )
 
 type Handler struct {
@@ -22,11 +24,7 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 	var limit int
 	var err error
 
-	uVal := c.Locals("user")
-	_, ok := uVal.(*models.User)
-	if !ok {
-		return fiber.NewError(fiber.StatusUnauthorized, "unauthorized")
-	}
+	_ = account.GetUserFromContext(c)
 
 	var input models.LogPopulate
 

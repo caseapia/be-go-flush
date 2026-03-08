@@ -16,6 +16,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group.Patch("/edit/name/:id", h.ChangeUserName)                           // & Change user name (only staff members can bypass restrictions and change name of other users)
 	group.Patch("/edit/email/:id", h.ChangeUserEmail)                         // & Change user email (only staff members can bypass restrictions and change email of other users)
 	group.Patch("/edit/password/:id", h.ChangeUserPassword)                   // & Change user password (only staff members can bypass restrictions and change password of other users)
+	group.Get("/sessions/:id", h.SearchSessionsByUser)                        // & Get last 10 user sessions (only staff members with flag "DEV" in developer rank or "SENIOR" in staff rank can bypass this restriction)
 
 	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)                                 // ~ Create a new user
 	groupAdmin.Patch("/ban/:id", middleware.RequireFlag("ADMIN"), h.BanUser)                                  // ~ Ban user

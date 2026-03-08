@@ -7,6 +7,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/user/badges"
 	"github.com/caseapia/goproject-flush/internal/utils"
+	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -19,11 +20,7 @@ func NewHandler(s *badges.Service) *Handler {
 }
 
 func (h *Handler) PopulateAllBadges(ctx *fiber.Ctx) error {
-	val := ctx.Locals("user")
-	_, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	_ = account.GetUserFromContext(ctx)
 
 	badges, err := h.service.PopulateAllBadges(ctx.UserContext())
 	if err != nil {
@@ -34,18 +31,14 @@ func (h *Handler) PopulateAllBadges(ctx *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateBadge(ctx *fiber.Ctx) error {
-	val := ctx.Locals("user")
-	u, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.BadgeAdminResponse
 	if err := ctx.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: fmt.Sprintf("invalid request: %s", err.Error())}
 	}
 
-	badge, err := h.service.CreateBadge(ctx.UserContext(), input, u)
+	badge, err := h.service.CreateBadge(ctx.UserContext(), input, sender)
 	if err != nil {
 		return err
 	}
@@ -56,18 +49,14 @@ func (h *Handler) CreateBadge(ctx *fiber.Ctx) error {
 func (h *Handler) EditBadge(ctx *fiber.Ctx) error {
 	id, _ := strconv.Atoi(ctx.Params("id"))
 
-	val := ctx.Locals("user")
-	u, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
 	var input models.BadgeAdminResponse
 	if err := ctx.BodyParser(&input); err != nil {
 		return &fiber.Error{Code: 400, Message: fmt.Sprintf("invalid request: %s", err.Error())}
 	}
 
-	badge, err := h.service.EditBadge(ctx.UserContext(), uint64(id), input, u.ID)
+	badge, err := h.service.EditBadge(ctx.UserContext(), uint64(id), input, sender.ID)
 	if err != nil {
 		return err
 	}
@@ -78,13 +67,9 @@ func (h *Handler) EditBadge(ctx *fiber.Ctx) error {
 func (h *Handler) DeleteBadge(ctx *fiber.Ctx) error {
 	id, _ := strconv.Atoi(ctx.Params("id"))
 
-	val := ctx.Locals("user")
-	u, ok := val.(*models.User)
-	if !ok {
-		return &fiber.Error{Code: 401, Message: "unauthorized"}
-	}
+	sender := account.GetUserFromContext(ctx)
 
-	isDeleted, err := h.service.DeleteBadge(ctx.UserContext(), uint64(id), u.ID)
+	isDeleted, err := h.service.DeleteBadge(ctx.UserContext(), uint64(id), sender.ID)
 	if err != nil {
 		return err
 	}

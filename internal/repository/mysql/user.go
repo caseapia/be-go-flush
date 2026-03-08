@@ -15,14 +15,14 @@ import (
 )
 
 func (r *Repository) populateUserBadges(ctx context.Context, u *models.User) error {
-	if len(u.BadgeIDs) == 0 {
+	if len(*u.BadgeIDs) == 0 {
 		u.Badges = make([]models.Badge, 0)
 		return nil
 	}
 
 	err := r.DB.NewSelect().
 		Model(&u.Badges).
-		Where("id IN (?)", bun.In(u.BadgeIDs)).
+		Where("id IN (?)", bun.In(*u.BadgeIDs)).
 		Scan(ctx)
 
 	return err
@@ -54,9 +54,9 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 
 	u.Badges = make([]models.Badge, 0)
 	if u.BadgeIDs == nil {
-		u.BadgeIDs = make([]uint64, 0)
+		u.BadgeIDs = &[]uint64{}
 	}
-	if len(u.BadgeIDs) > 0 {
+	if len(*u.BadgeIDs) > 0 {
 		_ = r.populateUserBadges(ctx, u)
 	}
 	return u, nil
@@ -83,10 +83,10 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 
 	u.Badges = make([]models.Badge, 0)
 	if u.BadgeIDs == nil {
-		u.BadgeIDs = make([]uint64, 0)
+		u.BadgeIDs = &[]uint64{}
 	}
 
-	if len(u.BadgeIDs) > 0 {
+	if len(*u.BadgeIDs) > 0 {
 		_ = r.populateUserBadges(ctx, u)
 	}
 
@@ -114,7 +114,11 @@ func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) 
 	for i := range users {
 		users[i].Badges = make([]models.Badge, 0)
 
-		if len(users[i].BadgeIDs) > 0 {
+		if users[i].BadgeIDs == nil {
+			users[i].BadgeIDs = &[]uint64{}
+		}
+
+		if len(*users[i].BadgeIDs) > 0 {
 			if err := r.populateUserBadges(ctx, &users[i]); err != nil {
 				slog.Errorf("failed to populate badges for user %d: %v", users[i].ID, err)
 			}
@@ -136,10 +140,13 @@ func (r *Repository) UpdateUser(ctx context.Context, tx bun.IDB, user *models.Us
 	}
 
 	_, err := query.Exec(ctx)
+	if err != nil {
+		return user, err
+	}
 
 	updatedUser, err := r.SearchUserByID(ctx, user.ID)
 	if err != nil {
-		return nil, err
+		return updatedUser, err
 	}
 
 	return updatedUser, err
@@ -185,10 +192,10 @@ func (r *Repository) LookupByDiscordID(ctx context.Context, discordID string) (*
 
 	u.Badges = make([]models.Badge, 0)
 	if u.BadgeIDs == nil {
-		u.BadgeIDs = make([]uint64, 0)
+		u.BadgeIDs = &[]uint64{}
 	}
 
-	if len(u.BadgeIDs) > 0 {
+	if len(*u.BadgeIDs) > 0 {
 		_ = r.populateUserBadges(ctx, u)
 	}
 
@@ -319,14 +326,14 @@ func (r *Repository) LiftBan(ctx context.Context, tx bun.IDB, userID uint64) err
 	return err
 }
 
-func (r *Repository) UpdateLastLogin(ctx *fiber.Ctx, tx bun.IDB, userID uint64) error {
+func (r *Repository) UpdateLastLogin(ctx context.Context, tx bun.IDB, userID uint64, ip string) error {
 	_, err := tx.NewUpdate().
 		Model((*models.User)(nil)).
 		Set("last_login = ?", time.Now()).
-		Set("last_ip = ?", ctx.IP()).
-		Set("register_ip = IF(register_ip IS NULL, ?, register_ip)", ctx.IP()).
+		Set("last_ip = ?", ip).
+		Set("register_ip = IF(register_ip IS NULL, ?, register_ip)", ip).
 		Where("id = ?", userID).
-		Exec(ctx.UserContext())
+		Exec(ctx)
 	return err
 }
 
