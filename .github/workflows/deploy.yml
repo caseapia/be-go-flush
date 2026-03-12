@@ -15,15 +15,33 @@ on:
         options:
           - "false"
           - "true"
+      skip_tests:
+        description: "Skip tests (emergency deploy)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      rollback:
+        description: "Rollback to previous version"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 env:
   GO_VERSION: "1.22"
   BINARY_NAME: flush-api
+  DEPLOY_TIMEOUT: "300"
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.skip_tests != 'true' && github.event.inputs.rollback != 'true' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -39,8 +57,10 @@ jobs:
                 \"description\": \"Building and testing the new changes.\",
                 \"fields\": [
                   { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
-                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ github.sha }}\`\", \"inline\": true }
-                ]
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${GITHUB_SHA:0:7}\`\", \"inline\": true },
+                  { \"name\": \"🌿 Branch\", \"value\": \"${{ github.ref_name }}\", \"inline\": true }
+                ],
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
               }]
             }"
 
@@ -56,25 +76,44 @@ jobs:
             ~/go/pkg/mod
             ~/.cache/go-build
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
 
       - name: Static analysis
-        run: go vet ./...
+        run: |
+          echo "Running go vet..."
+          go vet ./...
 
-      - name: Run tests
+          echo "Running go fmt check..."
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Code is not formatted. Run 'go fmt ./...'"
+            gofmt -l .
+            exit 1
+          fi
+
+      - name: Run tests with coverage
         id: test_run
-        run: go test -v ./...
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
 
       - name: Notify Discord - Test Results
         if: always()
         run: |
-          if [ "${{ job.status }}" = "success" ]; then
+          if [ "${{ steps.test_run.outcome }}" = "success" ]; then
             TITLE="✅ Tests Passed"
             COLOR=3066993
             DESC="All tests completed successfully."
+            COVERAGE_FIELD="\"{ \\\"name\\\": \\\"📊 Coverage\\\", \\\"value\\\": \\\"${{ steps.test_run.outputs.coverage }}\\\", \\\"inline\\\": true }\","
           else
             TITLE="❌ Tests Failed"
             COLOR=15158332
             DESC="Some tests failed. Check the action logs."
+            COVERAGE_FIELD=""
           fi
 
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
@@ -84,28 +123,56 @@ jobs:
                 \"title\": \"$TITLE\",
                 \"description\": \"$DESC\",
                 \"color\": $COLOR,
-                \"url\": \"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"
+                \"fields\": [
+                  $COVERAGE_FIELD
+                  { \"name\": \"🔗 Logs\", \"value\": \"[View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\", \"inline\": true }
+                ],
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
               }]
             }"
 
   deploy:
     name: Deploy
     needs: test
+    if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history for version comparison
+
+      - name: Get version info
+        id: version
+        run: |
+          CURRENT_SHA="${GITHUB_SHA:0:7}"
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+          COMMIT_TIME=$(git log -1 --pretty=%ci)
+          FILES_CHANGED=$(git diff-tree --no-commit-id --name-only -r $GITHUB_SHA | wc -l)
+
+          echo "current_sha=$CURRENT_SHA" >> $GITHUB_OUTPUT
+          echo "commit_msg=$COMMIT_MSG" >> $GITHUB_OUTPUT
+          echo "commit_time=$COMMIT_TIME" >> $GITHUB_OUTPUT
+          echo "files_changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
 
       - name: Set up Go
+        if: ${{ github.event.inputs.rollback != 'true' }}
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
 
       - name: Build binary
+        if: ${{ github.event.inputs.rollback != 'true' }}
         run: |
+          echo "Building binary..."
+          BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-            go build -ldflags='-s -w -extldflags "-static"' \
+            go build -ldflags="-s -w -extldflags '-static' -X main.Version=${{ steps.version.outputs.current_sha }} -X main.BuildTime=$BUILD_TIME" \
             -o ${{ env.BINARY_NAME }} ./cmd/app/
+
+          ls -lh ${{ env.BINARY_NAME }}
+          file ${{ env.BINARY_NAME }}
 
       - name: Setup SSH
         run: |
@@ -114,105 +181,284 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p ${{ secrets.DEPLOY_PORT }} -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Pre-deployment health check
+        id: pre_check
+        run: |
+          echo "Checking current service status..."
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping || echo "000")
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/ping || echo "0")
+
+          echo "pre_status=$STATUS" >> $GITHUB_OUTPUT
+          echo "pre_response_time=$RESPONSE_TIME" >> $GITHUB_OUTPUT
+
+          if [ "$STATUS" != "200" ]; then
+            echo "⚠️ Warning: Service is not responding correctly before deployment"
+          fi
+
       - name: Upload binary
+        if: ${{ github.event.inputs.rollback != 'true' }}
         run: |
           scp -P ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ env.BINARY_NAME }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
 
+          echo "Binary uploaded successfully"
+
       - name: Deploy and restart service
         id: deploy_step
         run: |
+          ROLLBACK_MODE="${{ github.event.inputs.rollback }}"
+          DEBUG_MODE="${{ github.event.inputs.debug }}"
+
+          # Выполняем SSH команды и сохраняем вывод во временный файл
           ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            'bash -s' << 'ENDSSH'
+            "bash -s $ROLLBACK_MODE $DEBUG_MODE" << 'ENDSSH' > /tmp/deploy_output.txt
 
           set -e
 
-          sudo systemctl stop flush-api
+          ROLLBACK_MODE=$1
+          DEBUG_MODE=$2
 
+          echo "=== Deployment started ==="
+          START_TIME=$(date +%s)
+
+          # Сохраняем информацию о текущей версии
           if [ -f /opt/flush/bin/flush-api ]; then
-            cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
+            CURRENT_VERSION=$(md5sum /opt/flush/bin/flush-api | awk '{print $1}')
+            echo "previous_version=$CURRENT_VERSION"
+          else
+            echo "previous_version=none"
           fi
 
-          mv /tmp/flush-api-new /opt/flush/bin/flush-api
-          chmod 750 /opt/flush/bin/flush-api
+          # Останавливаем сервис
+          sudo systemctl stop flush-api
+          echo "Service stopped"
 
-          if [ "${{ github.event.inputs.debug }}" = "true" ]; then
+          if [ "$ROLLBACK_MODE" = "true" ]; then
+            echo "=== ROLLBACK MODE ==="
+            if [ -f /opt/flush/bin/flush-api.bak ]; then
+              mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              chmod 750 /opt/flush/bin/flush-api
+              echo "Rolled back to previous version"
+              DEPLOYMENT_TYPE="rollback"
+            else
+              echo "No backup found for rollback!"
+              exit 1
+            fi
+          else
+            # Бэкап текущей версии
+            if [ -f /opt/flush/bin/flush-api ]; then
+              cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
+              echo "Backup created"
+            fi
+            
+            # Устанавливаем новую версию
+            mv /tmp/flush-api-new /opt/flush/bin/flush-api
+            chmod 750 /opt/flush/bin/flush-api
+            echo "New binary installed"
+            DEPLOYMENT_TYPE="deploy"
+          fi
+
+          # Настраиваем debug режим
+          if [ "$DEBUG_MODE" = "true" ]; then
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api -debug|' /etc/systemd/system/flush-api.service
             LOG_TYPE="debug"
           else
             sudo sed -i 's|^ExecStart=.*|ExecStart=/opt/flush/bin/flush-api|' /etc/systemd/system/flush-api.service
-            LOG_TYPE="default"
+            LOG_TYPE="production"
           fi
 
+          # Перезагружаем и запускаем
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
 
-          sleep 5
+          echo "Service starting..."
+          sleep 7
 
+          # Проверяем что сервис запустился
           if ! sudo systemctl is-active --quiet flush-api; then
-            echo "Service failed. Showing logs:"
+            echo "❌ Service failed to start!"
+            echo "=== Last 50 lines of logs ==="
             sudo journalctl -u flush-api -n 50 --no-pager
-
+            
             if [ -f /opt/flush/bin/flush-api.bak ]; then
-              echo "Rolling back..."
+              echo "=== Auto-rollback triggered ==="
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               sudo systemctl restart flush-api
+              sleep 5
+              if sudo systemctl is-active --quiet flush-api; then
+                echo "✅ Rollback successful"
+              fi
             fi
-
+            
             exit 1
           fi
 
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping || true)
+          echo "Service is active"
+
+          # Health check
+          sleep 3
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping || echo "000")
+            
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (attempt $((RETRY_COUNT + 1)))"
+              break
+            fi
+            
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Health check failed (attempt $RETRY_COUNT/$MAX_RETRIES), status: $STATUS"
+            sleep 2
+          done
 
           if [ "$STATUS" != "200" ]; then
-            echo "Health check failed ($STATUS)"
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
             sudo journalctl -u flush-api -n 50 --no-pager
-
+            
             if [ -f /opt/flush/bin/flush-api.bak ]; then
-              echo "Rolling back..."
+              echo "=== Auto-rollback triggered ==="
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               sudo systemctl restart flush-api
             fi
-
+            
             exit 1
           fi
 
-          CPU_LOAD=$(top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1"%"}')
-          MEM_USAGE=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.2f%%)", $3, $2, $3*100/$2 }')
+          # Собираем метрики
+          CPU_LOAD=$(top -bn2 -d 0.5 | grep 'Cpu(s)' | tail -1 | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{printf "%.1f%%", 100 - $1}')
+          MEM_USAGE=$(free -m | awk '/Mem:/ { printf "%d/%dMB (%.1f%%)", $3, $2, $3*100/$2 }')
           DISK_USAGE=$(df -h / | awk 'NR==2 {print $5}')
-          UPTIME=$(uptime -p)
-          PROCESS_MEM=$(ps -o rss= -C flush-api | awk '{printf "%.2f MB", $1/1024}')
+          UPTIME=$(uptime -p | sed 's/up //')
+          PROCESS_MEM=$(ps -o rss= -C flush-api 2>/dev/null | awk '{sum+=$1} END {printf "%.2f MB", sum/1024}')
+          PROCESS_CPU=$(ps -o %cpu= -C flush-api 2>/dev/null | awk '{sum+=$1} END {printf "%.1f%%", sum}')
+          LOAD_AVG=$(uptime | awk -F'load average:' '{print $2}' | sed 's/^[ \t]*//')
+          CONNECTIONS=$(ss -tn state established '( dport = :443 or sport = :443 )' | wc -l)
 
+          # Response time check
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/ping || echo "0")
+
+          END_TIME=$(date +%s)
+          DEPLOY_DURATION=$((END_TIME - START_TIME))
+
+          # Выводим все метрики
           echo "cpu_load=$CPU_LOAD"
           echo "mem_usage=$MEM_USAGE"
           echo "disk_usage=$DISK_USAGE"
           echo "uptime=$UPTIME"
           echo "process_mem=$PROCESS_MEM"
+          echo "process_cpu=$PROCESS_CPU"
+          echo "load_avg=$LOAD_AVG"
+          echo "connections=$CONNECTIONS"
+          echo "response_time=${RESPONSE_TIME}s"
           echo "logging_type=$LOG_TYPE"
+          echo "deployment_type=$DEPLOYMENT_TYPE"
+          echo "deploy_duration=${DEPLOY_DURATION}s"
+          echo "health_status=healthy"
 
-          ENDSSH | tee -a $GITHUB_OUTPUT
+          echo "=== Deployment completed successfully ==="
+          ENDSSH
+
+          # Читаем вывод и парсим переменные
+          while IFS='=' read -r key value; do
+            # Очищаем значения от лишних символов
+            clean_value=$(echo "$value" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            echo "${key}=${clean_value}" >> $GITHUB_OUTPUT
+            echo "📊 ${key}: ${clean_value}"
+          done < /tmp/deploy_output.txt
+
+          cat /tmp/deploy_output.txt
+
+      - name: Post-deployment smoke tests
+        id: smoke_tests
+        run: |
+          echo "Running smoke tests..."
+
+          # Test 1: Ping endpoint
+          PING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping)
+          echo "ping_test=$PING_STATUS" >> $GITHUB_OUTPUT
+
+          # Test 2: Response time
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/ping)
+          echo "response_time_test=${RESPONSE_TIME}s" >> $GITHUB_OUTPUT
+
+          # Test 3: Multiple requests
+          SUCCESS_COUNT=0
+          for i in {1..10}; do
+            if [ "$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping)" = "200" ]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            fi
+            sleep 0.2
+          done
+
+          SUCCESS_RATE=$((SUCCESS_COUNT * 10))
+          echo "success_rate=${SUCCESS_RATE}%" >> $GITHUB_OUTPUT
+
+          if [ $SUCCESS_COUNT -lt 9 ]; then
+            echo "⚠️ Warning: Success rate below 90%"
+          fi
 
       - name: Notify Discord - Success
         if: success()
         run: |
-          STATS_FIELD="📊 **CPU:** ${{ steps.deploy_step.outputs.cpu_load }} | **Disk:** ${{ steps.deploy_step.outputs.disk_usage }}\n🧠 **RAM:** ${{ steps.deploy_step.outputs.mem_usage }}\n💎 **App RAM:** ${{ steps.deploy_step.outputs.process_mem }}\n⏱️ **Uptime:** ${{ steps.deploy_step.outputs.uptime }}"
-          LOG_TYPE="${{ steps.deploy_step.outputs.logging_type }}"
+          # Экранируем специальные символы для JSON
+          escape_json() {
+            echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g'
+          }
 
-          COMMIT_MSG=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          CPU_LOAD=$(escape_json "${{ steps.deploy_step.outputs.cpu_load }}")
+          MEM_USAGE=$(escape_json "${{ steps.deploy_step.outputs.mem_usage }}")
+          DISK_USAGE=$(escape_json "${{ steps.deploy_step.outputs.disk_usage }}")
+          UPTIME=$(escape_json "${{ steps.deploy_step.outputs.uptime }}")
+          PROCESS_MEM=$(escape_json "${{ steps.deploy_step.outputs.process_mem }}")
+          PROCESS_CPU=$(escape_json "${{ steps.deploy_step.outputs.process_cpu }}")
+          LOAD_AVG=$(escape_json "${{ steps.deploy_step.outputs.load_avg }}")
+          CONNECTIONS=$(escape_json "${{ steps.deploy_step.outputs.connections }}")
+          RESPONSE_TIME=$(escape_json "${{ steps.deploy_step.outputs.response_time }}")
+          DEPLOY_DURATION=$(escape_json "${{ steps.deploy_step.outputs.deploy_duration }}")
+          LOG_TYPE=$(escape_json "${{ steps.deploy_step.outputs.logging_type }}")
+          DEPLOYMENT_TYPE=$(escape_json "${{ steps.deploy_step.outputs.deployment_type }}")
+
+          COMMIT_MSG=$(escape_json "${{ steps.version.outputs.commit_msg }}")
+          FILES_CHANGED="${{ steps.version.outputs.files_changed }}"
+          SUCCESS_RATE="${{ steps.smoke_tests.outputs.success_rate }}"
+
+          # Определяем цвет и иконку в зависимости от типа деплоя
+          if [ "$DEPLOYMENT_TYPE" = "rollback" ]; then
+            TITLE="⏮️ Rollback Successful"
+            COLOR=16776960
+          else
+            TITLE="✅ Deploy Successful"
+            COLOR=3066993
+          fi
 
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "{
               \"embeds\": [{
-                \"title\": \"✅ Deploy Successful\",
-                \"color\": 3066993,
+                \"title\": \"$TITLE\",
+                \"color\": $COLOR,
                 \"fields\": [
-                  { \"name\": \"🌐 Service\", \"value\": \"api.dontkillme.lol\", \"inline\": true },
-                  { \"name\": \"🛠️ Logging Type\", \"value\": \"$LOG_TYPE\", \"inline\": true },
+                  { \"name\": \"🌐 Service\", \"value\": \"[api.dontkillme.lol](https://api.dontkillme.lol)\", \"inline\": true },
+                  { \"name\": \"🛠️ Mode\", \"value\": \"$LOG_TYPE\", \"inline\": true },
+                  { \"name\": \"⏱️ Duration\", \"value\": \"$DEPLOY_DURATION\", \"inline\": true },
                   { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
-                  { \"name\": \"📈 Server Status\", \"value\": \"$STATS_FIELD\", \"inline\": false },
-                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ github.sha }}\` $COMMIT_MSG\", \"inline\": false }
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ steps.version.outputs.current_sha }}\`\", \"inline\": true },
+                  { \"name\": \"📊 Files Changed\", \"value\": \"$FILES_CHANGED\", \"inline\": true },
+                  { \"name\": \"💻 CPU\", \"value\": \"$CPU_LOAD\", \"inline\": true },
+                  { \"name\": \"💾 RAM\", \"value\": \"$MEM_USAGE\", \"inline\": true },
+                  { \"name\": \"💿 Disk\", \"value\": \"$DISK_USAGE\", \"inline\": true },
+                  { \"name\": \"🔥 Load Avg\", \"value\": \"$LOAD_AVG\", \"inline\": true },
+                  { \"name\": \"💎 App RAM\", \"value\": \"$PROCESS_MEM\", \"inline\": true },
+                  { \"name\": \"⚡ App CPU\", \"value\": \"$PROCESS_CPU\", \"inline\": true },
+                  { \"name\": \"🔌 Connections\", \"value\": \"$CONNECTIONS\", \"inline\": true },
+                  { \"name\": \"⏲️ Response\", \"value\": \"$RESPONSE_TIME\", \"inline\": true },
+                  { \"name\": \"✅ Success Rate\", \"value\": \"$SUCCESS_RATE\", \"inline\": true },
+                  { \"name\": \"⏰ Uptime\", \"value\": \"$UPTIME\", \"inline\": false },
+                  { \"name\": \"📋 Message\", \"value\": \"$COMMIT_MSG\", \"inline\": false }
                 ],
                 \"footer\": { \"text\": \"${{ github.repository }}\" },
                 \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
@@ -222,6 +468,18 @@ jobs:
       - name: Notify Discord - Failure
         if: failure()
         run: |
+          STEP_FAILED="unknown"
+
+          if [ "${{ steps.deploy_step.outcome }}" = "failure" ]; then
+            STEP_FAILED="deployment"
+            ERROR_DESC="The deployment process encountered an error during service restart or health check."
+          elif [ "${{ steps.smoke_tests.outcome }}" = "failure" ]; then
+            STEP_FAILED="smoke tests"
+            ERROR_DESC="Deployment succeeded but smoke tests failed."
+          else
+            ERROR_DESC="The deployment process encountered an error."
+          fi
+
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
             -H "Content-Type: application/json" \
             -d "{
@@ -229,10 +487,14 @@ jobs:
               \"embeds\": [{
                 \"title\": \"❌ Deployment Failed\",
                 \"color\": 15158332,
-                \"description\": \"The deployment process encountered an error.\",
+                \"description\": \"$ERROR_DESC\",
                 \"fields\": [
-                  { \"name\": \"🔗 Run Link\", \"value\": \"[View Action Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\", \"inline\": false }
-                ]
+                  { \"name\": \"🚨 Failed Step\", \"value\": \"$STEP_FAILED\", \"inline\": true },
+                  { \"name\": \"👤 Author\", \"value\": \"${{ github.actor }}\", \"inline\": true },
+                  { \"name\": \"📝 Commit\", \"value\": \"\`${{ steps.version.outputs.current_sha }}\`\", \"inline\": true },
+                  { \"name\": \"🔗 Logs\", \"value\": \"[View Action Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\", \"inline\": false }
+                ],
+                \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
               }]
             }"
 
