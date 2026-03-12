@@ -349,12 +349,22 @@ jobs:
 
           # Читаем вывод и парсим переменные
           while IFS='=' read -r key value; do
-            # Очищаем значения от лишних символов
-            clean_value=$(echo "$value" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            echo "${key}=${clean_value}" >> $GITHUB_OUTPUT
-            echo "📊 ${key}: ${clean_value}"
+            # Пропускаем строки без = или с пустым ключом
+            if [ -z "$key" ] || [ -z "$value" ]; then
+              continue
+            fi
+            
+            # Обрабатываем только валидные имена переменных (буквы, цифры, _)
+            if echo "$key" | grep -qE '^[a-zA-Z_][a-zA-Z0-9_]*$'; then
+              # Очищаем значения от лишних символов
+              clean_value=$(echo "$value" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+              echo "${key}=${clean_value}" >> $GITHUB_OUTPUT
+              echo "📊 ${key}: ${clean_value}"
+            fi
           done < /tmp/deploy_output.txt
 
+          echo ""
+          echo "=== Full deployment log ==="
           cat /tmp/deploy_output.txt
 
       - name: Post-deployment smoke tests
