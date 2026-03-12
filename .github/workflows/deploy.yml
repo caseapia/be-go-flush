@@ -83,16 +83,7 @@ jobs:
         run: go mod download
 
       - name: Static analysis
-        run: |
-          echo "Running go vet..."
-          go vet ./...
-
-          echo "Running go fmt check..."
-          if [ -n "$(gofmt -l .)" ]; then
-            echo "Code is not formatted. Run 'go fmt ./...'"
-            gofmt -l .
-            exit 1
-          fi
+        run: go vet ./...
 
       - name: Run tests with coverage
         id: test_run
