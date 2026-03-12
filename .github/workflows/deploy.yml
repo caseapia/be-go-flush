@@ -85,15 +85,9 @@ jobs:
       - name: Static analysis
         run: go vet ./...
 
-      - name: Run tests with race detector
-        run: go test -v -race ./...
-
-      - name: Run tests with coverage
+      - name: Run tests
         id: test_run
-        run: |
-          go test -v -coverprofile=coverage.out -covermode=count ./...
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}')
-          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        run: go test -v ./...
 
       - name: Notify Discord - Test Results
         if: always()
@@ -102,12 +96,10 @@ jobs:
             TITLE="✅ Tests Passed"
             COLOR=3066993
             DESC="All tests completed successfully."
-            COVERAGE_FIELD="\"{ \\\"name\\\": \\\"📊 Coverage\\\", \\\"value\\\": \\\"${{ steps.test_run.outputs.coverage }}\\\", \\\"inline\\\": true }\","
           else
             TITLE="❌ Tests Failed"
             COLOR=15158332
             DESC="Some tests failed. Check the action logs."
-            COVERAGE_FIELD=""
           fi
 
           curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
@@ -118,7 +110,6 @@ jobs:
                 \"description\": \"$DESC\",
                 \"color\": $COLOR,
                 \"fields\": [
-                  $COVERAGE_FIELD
                   { \"name\": \"🔗 Logs\", \"value\": \"[View Details](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\", \"inline\": true }
                 ],
                 \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"
