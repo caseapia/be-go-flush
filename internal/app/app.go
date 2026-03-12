@@ -196,7 +196,7 @@ func NewApp() (*fiber.App, error) {
 	authHandler.RegisterRoutes(public)
 
 	private := api.Group("/private")
-	private.Use(auth.AuthMiddleware(authSrv))
+	private.Use(auth.AuthMiddleware(authSrv, mainRepo))
 	private.Use(middleware.UpdateLastLogin(mainRepo))
 	private.Use(middleware.LoadRank(ranksSrv))
 

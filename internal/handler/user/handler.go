@@ -129,6 +129,37 @@ func (h *Handler) SearchSessionsByUser(c *fiber.Ctx) error {
 	})
 }
 
+func (h *Handler) TerminateSession(c *fiber.Ctx) error {
+	sender := account.GetUserFromContext(c)
+
+	var input *models.TerminateSessionRequest
+	if err := c.BodyParser(&input); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	state, err := h.auth.TerminateSession(c.UserContext(), *sender, input.SessionID)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, fiber.Map{
+		"state": state,
+	})
+}
+
+func (h *Handler) TerminateAllSessions(c *fiber.Ctx) error {
+	sender := account.GetUserFromContext(c)
+
+	state, err := h.auth.TerminateAllSessions(c.UserContext(), *sender)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, fiber.Map{
+		"state": state,
+	})
+}
+
 // ! Admin actions
 func (h *Handler) SearchUserByID(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))

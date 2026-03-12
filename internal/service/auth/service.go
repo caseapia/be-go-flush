@@ -105,6 +105,13 @@ func (s *Service) Login(ctx *fiber.Ctx, login, password, userAgent, ip string) (
 			return err
 		}
 
+		if user.ActiveBanID != nil && user.ActiveBan.ExpirationDate.Before(time.Now()) {
+			err := s.repository.LiftBan(ctx.UserContext(), tx, user.ID)
+			if err != nil {
+				return err
+			}
+		}
+
 		s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &user.ID, enums.UserLogin, fmt.Sprintf("UserAgent: %s | IP: %s", session.UserAgent, session.IPLast))
 
 		accessToken, err = utils.GenerateAccessToken(user.ID, sessionID, user.TokenVersion)
@@ -225,4 +232,33 @@ func (s *Service) SearchSessionsByUser(ctx *fiber.Ctx, sender models.User, userI
 	}
 
 	return sessions, txErr
+}
+
+func (s *Service) TerminateSession(ctx context.Context, sender models.User, sessionID string) (bool, error) {
+	var err error
+	var state bool
+	s.repository.WithTx(ctx, func(tx bun.Tx) error {
+		session, err := s.repository.SearchSessionByID(ctx, tx, sessionID)
+		if err != nil {
+			return err
+		}
+
+		state, err = s.repository.TerminateSession(ctx, tx, session.ID)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return state, err
+}
+
+func (s *Service) TerminateAllSessions(ctx context.Context, sender models.User) (bool, error) {
+	state, err := s.repository.TerminateAllSessions(ctx, s.repository.DB, sender.ID)
+	if err != nil {
+		return false, err
+	}
+
+	return state, err
 }

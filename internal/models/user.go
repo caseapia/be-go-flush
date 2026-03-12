@@ -86,7 +86,7 @@ type Notification struct {
 type Session struct {
 	bun.BaseModel `bun:"table:sessions"`
 
-	ID          string    `bun:"id,pk,unique" json:"-"`
+	ID          string    `bun:"id,pk,unique" json:"id"`
 	UserID      uint64    `bun:"user_id" json:"-"`
 	RefreshHash string    `bun:"refresh_hash" json:"-"`
 	UserAgent   string    `bun:"user_agent" json:"user_agent"`
@@ -180,6 +180,10 @@ type SendNotificationRequest struct {
 
 type RemoveNotificationRequest struct {
 	NotifyID uint64 `json:"id"`
+}
+
+type TerminateSessionRequest struct {
+	SessionID string `json:"session_id"`
 }
 
 // & Responses

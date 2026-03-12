@@ -2,13 +2,15 @@ package auth
 
 import (
 	"strings"
+	"time"
 
+	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthMiddleware(authSrv *auth.Service) fiber.Handler {
+func AuthMiddleware(authSrv *auth.Service, repo *mysql.Repository) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var token string
 
@@ -33,8 +35,26 @@ func AuthMiddleware(authSrv *auth.Service) fiber.Handler {
 			return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 		}
 
+		session, err := repo.SearchSessionByID(c.UserContext(), repo.DB, claims.SessionID)
+		if err != nil {
+			return err
+		}
+
 		if user == nil || claims == nil {
 			return fiber.NewError(fiber.StatusUnauthorized, "invalid token data")
+		}
+
+		if session.Revoked == true {
+			return fiber.NewError(fiber.StatusForbidden, "session revoked")
+		}
+
+		if session.ExpiresAt.Before(time.Now()) {
+			_, err := repo.TerminateSession(c.UserContext(), repo.DB, session.ID)
+			if err != nil {
+				return fiber.NewError(fiber.StatusInternalServerError, err.Error())
+			}
+
+			return fiber.NewError(fiber.StatusForbidden, "session expired")
 		}
 
 		_, stateError := account.CheckAccountStatus(user)

@@ -19,7 +19,8 @@ func (r *Repository) SearchByLogin(ctx context.Context, login string) (*models.U
 
 	err := r.DB.NewSelect().
 		Model(u).
-		Where("email = ? OR name = ?", login, login).
+		Where("?TableAlias.email = ? OR ?TableAlias.name = ?", login, login).
+		Relation("ActiveBan").
 		Limit(1).
 		Scan(ctx)
 
@@ -31,7 +32,8 @@ func (r *Repository) SearchByID(ctx context.Context, id uint64) (*models.User, e
 
 	err := r.DB.NewSelect().
 		Model(u).
-		Where("id = ?", id).
+		Where("?TableAlias.id = ?", id).
+		Relation("ActiveBan").
 		Scan(ctx)
 
 	return u, err
