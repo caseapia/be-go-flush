@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/caseapia/goproject-flush/internal/models"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gookit/slog"
 	"github.com/uptrace/bun"
 )

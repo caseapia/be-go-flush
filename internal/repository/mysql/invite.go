@@ -49,6 +49,8 @@ func (r *Repository) SearchInviteByCode(ctx context.Context, code string) (*mode
 	err := r.DB.NewSelect().
 		Model(invite).
 		Where("code = ?", code).
+		Relation("Creator").
+		Relation("User").
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
@@ -64,6 +66,8 @@ func (r *Repository) SearchInviteByID(ctx context.Context, id uint64) (*models.I
 	err := r.DB.NewSelect().
 		Model(invite).
 		Where("id = ?", id).
+		Relation("Creator").
+		Relation("User").
 		Limit(1).
 		Scan(ctx)
 	if err != nil {

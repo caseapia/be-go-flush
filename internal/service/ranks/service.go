@@ -8,7 +8,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gofiber/fiber/v2"
 )
 

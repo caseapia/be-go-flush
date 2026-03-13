@@ -8,7 +8,7 @@ import (
 	"net/url"
 
 	"github.com/caseapia/goproject-flush/internal/models"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )

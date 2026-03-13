@@ -4,11 +4,10 @@ import (
 	"strconv"
 
 	"github.com/caseapia/goproject-flush/internal/models"
-	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/internal/service/notifications"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 type Handler struct {
@@ -97,7 +96,7 @@ func (s *Handler) PopulateUserNotifications(c *fiber.Ctx) error {
 func (s *Handler) RemoveNotification(c *fiber.Ctx) error {
 	id, _ := strconv.Atoi(c.Params("id"))
 
-	sender := account.GetUserFromContext(c)	
+	sender := account.GetUserFromContext(c)
 
 	var input models.RemoveNotificationRequest
 	if err := c.BodyParser(&input); err != nil {

@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/uptrace/bun"
 )
 
@@ -11,34 +11,37 @@ type User struct {
 	bun.BaseModel `bun:"table:users"`
 
 	// Basic
-	ID        uint64           `bun:"id,pk,autoincrement,unique" json:"id"`
-	Name      string           `bun:"name,unique,notnull" json:"name"`
-	CreatedAt time.Time        `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
-	UpdatedAt time.Time        `bun:"updated_at,notnull,default:current_timestamp" json:"updatedAt"`
-	LastLogin *time.Time       `bun:"last_login" json:"lastLogin"`
-	BadgeIDs  *[]uint64        `bun:"badges,type:json" json:"-"`
-	Badges    []Badge          `bun:"-" json:"badges"`
-	Status    enums.UserStatus `bun:"status" json:"status"`
+	ID           uint64           `bun:"id,pk,autoincrement,unique" json:"id"`
+	Name         string           `bun:"name,unique,notnull" json:"name"`
+	CreatedAt    time.Time        `bun:"created_at,notnull,default:current_timestamp" json:"created_at"`
+	UpdatedAt    time.Time        `bun:"updated_at,notnull,default:current_timestamp" json:"updated_at"`
+	LastLogin    *time.Time       `bun:"last_login" json:"last_login"`
+	BadgeIDs     *[]uint64        `bun:"badges,type:json" json:"-"`
+	Badges       []Badge          `bun:"-" json:"badges"`
+	Status       enums.UserStatus `bun:"status" json:"status"`
+	DonatePoints int              `bun:"donate_points,default:0" json:"donate_points"`
 
 	// Staff
-	StaffRank     int       `bun:"staff_rank,default:1" json:"staffRank"`
-	DeveloperRank int       `bun:"developer_rank,default:1" json:"developerRank"`
-	Flags         *[]string `bun:"staff_flags,type:json" json:"staffFlags"`
+	StaffRank     int       `bun:"staff_rank,default:1" json:"staff_rank"`
+	DeveloperRank int       `bun:"developer_rank,default:1" json:"developer_rank"`
+	Flags         *[]string `bun:"staff_flags,type:json" json:"staff_flags"`
 
 	// Restrictions
 	ActiveBanID *uint64 `bun:"active_ban" json:"-"`
-	ActiveBan   *Ban    `bun:"rel:belongs-to,join:active_ban=id" json:"activeBan,omitempty"`
+	ActiveBan   *Ban    `bun:"rel:belongs-to,join:active_ban=id" json:"active_ban,omitempty"`
 
 	// Auth
 	TokenVersion int     `bun:"token_version" json:"-"`
-	DiscordName  *string `bun:"discord_name" json:"discordName"`
-	DiscordID    *string `bun:"discord_id" json:"discordID"`
+	DiscordName  *string `bun:"discord_name" json:"discord_name"`
+	DiscordID    *string `bun:"discord_id" json:"discord_id"`
 
 	// Sensetive data
-	Password   string `bun:"password" json:"-"`
-	Email      string `bun:"email" json:"email"`
-	RegisterIP string `bun:"register_ip" json:"-"`
-	LastIP     string `bun:"last_ip" json:"-"`
+	Password      string        `bun:"password" json:"-"`
+	Email         string        `bun:"email" json:"email"`
+	RegisterIP    string        `bun:"register_ip" json:"-"`
+	LastIP        string        `bun:"last_ip" json:"-"`
+	InvitedBy     *uint64       `bun:"invited_by" json:"-"`
+	InvitedByUser *UserRelation `bun:"rel:belongs-to,join:invited_by=id" json:"invited_by"`
 }
 
 type Ban struct {
@@ -48,7 +51,7 @@ type Ban struct {
 	IssuedBy       uint64          `bun:"issued_by,notnull" json:"-"`
 	IssuedTo       uint64          `bun:"issued_to,notnull" json:"-"`
 	Date           time.Time       `bun:"date,notnull,default:current_timestamp" json:"date"`
-	ExpirationDate time.Time       `bun:"expiration_date,notnull" json:"expirationDate"`
+	ExpirationDate time.Time       `bun:"expiration_date,notnull" json:"expiration_date"`
 	Reason         string          `bun:"reason,notnull" json:"reason"`
 	Status         enums.BanStatus `bun:"status,notnull" json:"status"`
 
@@ -64,20 +67,20 @@ type Badge struct {
 	Description string `bun:"description" json:"description"`
 	Conditions  string `bun:"conditions" json:"conditions"`
 	Color       string `bun:"color,default:'#ffffff'" json:"color"`
-	IconName    string `bun:"icon_name,default:'circle-question-mark'" json:"iconName"`
+	IconName    string `bun:"icon_name,default:'circle-question-mark'" json:"icon_name"`
 }
 
 type Notification struct {
 	bun.BaseModel `bun:"table:notifications"`
 
 	ID        uint64                  `bun:"id,pk,autoincrement,unique" json:"id"`
-	CreatedAt time.Time               `bun:"created_at,notnull,default:current_timestamp" json:"createdAt"`
+	CreatedAt time.Time               `bun:"created_at,notnull,default:current_timestamp" json:"created_at"`
 	Type      enums.NotificationsType `bun:"type,type:varchar(50),notnull,default:'information'" json:"type"`
 	Title     string                  `bun:"title" json:"title"`
-	SenderID  *uint64                 `bun:"sender_id" json:"senderId"`
-	UserID    uint64                  `bun:"user_id" json:"userId"`
+	SenderID  *uint64                 `bun:"sender_id" json:"sender_id"`
+	UserID    uint64                  `bun:"user_id" json:"user_id"`
 	Text      string                  `bun:"text" json:"text"`
-	IsReaded  bool                    `bun:"is_readed" json:"isReaded"`
+	IsReaded  bool                    `bun:"is_readed" json:"is_readed"`
 
 	Sender *UserRelation `bun:"rel:belongs-to,join:sender_id=id" json:"sender,omitempty"`
 	User   *UserRelation `bun:"rel:belongs-to,join:user_id=id" json:"user"`
@@ -98,7 +101,7 @@ type Session struct {
 
 // & Requests
 type BanRequest struct {
-	UnbanDate time.Time `json:"unbanDate"`
+	UnbanDate time.Time `json:"unban_date"`
 	Reason    string    `json:"reason"`
 }
 
@@ -141,7 +144,7 @@ type RegisterRequest struct {
 	Login      string `json:"login"`
 	Email      string `json:"email"`
 	Password   string `json:"password"`
-	InviteCode string `json:"inviteCode"`
+	InviteCode string `json:"invite_code"`
 }
 
 type LoginRequest struct {
@@ -156,7 +159,7 @@ type BadgeCreationRequest struct {
 	Description string `bun:"description" json:"description"`
 	Conditions  string `bun:"conditions" json:"conditions"`
 	Color       string `bun:"color,default:#ffffff" json:"color"`
-	IconName    string `bun:"icon_name,default:circle-question-mark" json:"iconName"`
+	IconName    string `bun:"icon_name,default:circle-question-mark" json:"icon_name"`
 	CreatedBy   uint64 `bun:"created_by" json:"-"`
 }
 
@@ -173,8 +176,8 @@ type NotificationsRequest struct {
 type SendNotificationRequest struct {
 	Type     enums.NotificationsType `json:"type"`
 	Title    string                  `json:"title"`
-	SenderID *uint64                 `json:"senderId"`
-	UserID   uint64                  `json:"userId"`
+	SenderID *uint64                 `json:"sender_id"`
+	UserID   uint64                  `json:"user_id"`
 	Text     string                  `json:"text"`
 }
 
@@ -184,6 +187,10 @@ type RemoveNotificationRequest struct {
 
 type TerminateSessionRequest struct {
 	SessionID string `json:"session_id"`
+}
+
+type SetDonatePointsRequest struct {
+	Points int `json:"points"`
 }
 
 // & Responses
@@ -209,10 +216,10 @@ type BadgeAdminResponse struct {
 
 	Badge
 	CreatedBy uint64    `bun:"created_by" json:"-"`
-	CreatedAt time.Time `bun:"created_at,default:current_timestamp" json:"createdAt"`
-	UpdatedAt time.Time `bun:"updated_at,default:current_timestamp" json:"updatedAt"`
+	CreatedAt time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+	UpdatedAt time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
 
-	Admin *UserRelation `bun:"rel:belongs-to,join:created_by=id" json:"createdBy"`
+	Admin *UserRelation `bun:"rel:belongs-to,join:created_by=id" json:"created_by"`
 }
 
 // & Relations
@@ -246,8 +253,7 @@ func (u *User) UserHasFlag(flag string) bool {
 
 func (u *User) GetPrivateData() map[string]interface{} {
 	return map[string]interface{}{
-		"email":      u.Email,
-		"registerIP": u.RegisterIP,
-		"lastIP":     u.LastIP,
+		"register_ip": u.RegisterIP,
+		"last_ip":     u.LastIP,
 	}
 }

@@ -1,71 +1,31 @@
 package auth
 
 import (
-	"strings"
 	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/service/auth"
-	"github.com/caseapia/goproject-flush/internal/service/invite"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
-	"github.com/go-sql-driver/mysql"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 )
 
 type Handler struct {
-	authService   *auth.Service
-	inviteService *invite.Service
+	authService *auth.Service
 }
 
-func NewHandler(auth *auth.Service, invite *invite.Service) *Handler {
-	return &Handler{authService: auth, inviteService: invite}
+func NewHandler(auth *auth.Service) *Handler {
+	return &Handler{authService: auth}
 }
 
 func (h *Handler) Register(c *fiber.Ctx) error {
 	var input models.RegisterRequest
-
 	if err := c.BodyParser(&input); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
+		return fiber.NewError(fiber.StatusBadRequest, "invalid request body "+err.Error())
 	}
 
-	invite, err := h.inviteService.GetInviteByID(c.UserContext(), input.InviteCode)
-	if err != nil || invite.Used {
-		return fiber.NewError(fiber.StatusBadRequest, "invite code is invalid or already used")
-	}
-
-	registeredUser, err := h.authService.Register(
-		c,
-		input.Login,
-		input.InviteCode,
-		input.Email,
-		input.Password,
-		c.IP(),
-	)
-
-	if err != nil {
-		if mysqlErr, ok := err.(*mysql.MySQLError); ok {
-			if mysqlErr.Number == 1062 {
-				if strings.Contains(mysqlErr.Message, "users.name") {
-					return fiber.NewError(fiber.StatusConflict, "login already exists")
-				}
-				if strings.Contains(mysqlErr.Message, "users.email") {
-					return fiber.NewError(fiber.StatusConflict, "email already exists")
-				}
-				return fiber.NewError(fiber.StatusConflict, "duplicate entry")
-			}
-		}
-		return fiber.NewError(fiber.StatusInternalServerError, err.Error())
-	}
-
-	err = h.inviteService.UseInvite(c.UserContext(), input.InviteCode, registeredUser.ID)
-	if err != nil {
-		slog.Error("Failed to mark invite as used", "error", err, "code", input.InviteCode)
-		return c.Status(fiber.StatusNotFound).SendString(err.Error())
-	}
-
-	accessToken, refreshToken, err := h.authService.Login(c, registeredUser.Name, registeredUser.Password, string(c.Context().UserAgent()), c.IP())
+	registeredUser, accessToken, refreshToken, err := h.authService.Register(c, input.Login, input.InviteCode, input.Email, input.Password, c.IP())
 	if err != nil {
 		return err
 	}
@@ -76,9 +36,9 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 	}).Debug("User successfully registered")
 
 	return utils.Success(c, 201, &fiber.Map{
-		"user":    registeredUser,
-		"auth":    accessToken,
-		"refresh": refreshToken,
+		"user":          registeredUser,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
 
@@ -116,8 +76,8 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	})
 
 	return utils.Success(c, 200, fiber.Map{
-		"accessToken":  access,
-		"refreshToken": refresh,
+		"access_token":  access,
+		"refresh_token": refresh,
 	})
 }
 
@@ -167,8 +127,8 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 	})
 
 	return utils.Success(c, 200, fiber.Map{
-		"accessToken":  newAccess,
-		"refreshToken": newRefresh,
+		"access_token":  newAccess,
+		"refresh_token": newRefresh,
 	})
 }
 

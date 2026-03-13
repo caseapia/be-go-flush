@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/caseapia/goproject-flush/internal/models"
+	"github.com/gofiber/fiber/v2"
 	"github.com/uptrace/bun"
 )
 
@@ -11,7 +12,10 @@ func (r *Repository) Create(ctx context.Context, tx bun.IDB, user *models.User) 
 	_, err := tx.NewInsert().
 		Model(user).
 		Exec(ctx)
-	return user, err
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
+	}
+	return user, nil
 }
 
 func (r *Repository) SearchByLogin(ctx context.Context, login string) (*models.User, error) {
@@ -21,6 +25,7 @@ func (r *Repository) SearchByLogin(ctx context.Context, login string) (*models.U
 		Model(u).
 		Where("?TableAlias.email = ? OR ?TableAlias.name = ?", login, login).
 		Relation("ActiveBan").
+		Relation("InvitedByUser").
 		Limit(1).
 		Scan(ctx)
 
@@ -34,6 +39,7 @@ func (r *Repository) SearchByID(ctx context.Context, id uint64) (*models.User, e
 		Model(u).
 		Where("?TableAlias.id = ?", id).
 		Relation("ActiveBan").
+		Relation("InvitedByUser").
 		Scan(ctx)
 
 	return u, err

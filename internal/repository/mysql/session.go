@@ -105,6 +105,7 @@ func (r *Repository) LockUser(ctx context.Context, tx bun.IDB, userID uint64) (b
 
 func (r *Repository) TerminateSession(ctx context.Context, tx bun.IDB, sessionID string) (bool, error) {
 	_, err := tx.NewDelete().
+		Model((*models.Session)(nil)).
 		Where("id = ?", sessionID).
 		Exec(ctx)
 	if err != nil {
@@ -116,6 +117,7 @@ func (r *Repository) TerminateSession(ctx context.Context, tx bun.IDB, sessionID
 
 func (r *Repository) TerminateAllSessions(ctx context.Context, tx bun.IDB, userID uint64) (bool, error) {
 	_, err := tx.NewDelete().
+		Model((*models.Session)(nil)).
 		Where("user_id = ?", userID).
 		Exec(ctx)
 	if err != nil {

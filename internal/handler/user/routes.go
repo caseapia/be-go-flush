@@ -17,6 +17,8 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	group.Patch("/edit/email/:id", h.ChangeUserEmail)                         // & Change user email (only staff members can bypass restrictions and change email of other users)
 	group.Patch("/edit/password/:id", h.ChangeUserPassword)                   // & Change user password (only staff members can bypass restrictions and change password of other users)
 	group.Get("/sessions/:id", h.SearchSessionsByUser)                        // & Get last 10 user sessions (only staff members with flag "DEV" in developer rank or "SENIOR" in staff rank can bypass this restriction)
+	group.Delete("/session/terminate", h.TerminateSession)                    // & Terminate user session by session ID
+	group.Delete("/session/terminate/all", h.TerminateAllSessions)            // & Terminate all user sessions
 
 	groupAdmin.Put("/create", middleware.RequireFlag("SENIOR"), h.CreateUser)                                 // ~ Create a new user
 	groupAdmin.Patch("/ban/:id", middleware.RequireFlag("ADMIN"), h.BanUser)                                  // ~ Ban user
@@ -27,6 +29,7 @@ func (h *Handler) RegisterRoutes(router fiber.Router) {
 	groupAdmin.Patch("/rank/developer/:id", middleware.RequireFlag("MANAGER"), h.SetDeveloperRank)            // ~ Set developer rank
 	groupAdmin.Get("/:id", middleware.RequireFlag("ADMIN"), h.GetUserPrivate)                                 // ~ Get sensetive user information
 	groupAdmin.Patch("/edit/status/:id", middleware.RequireFlag("LEAD"), h.ChangeUserStatus)                  // ~ Change user status
+	groupAdmin.Patch("/edit/donate/:id", middleware.RequireFlag("MANAGER"), h.SetDonatePoints)                // ~ Set user donate points
 	groupAdmin.Patch("/editflag/:id", middleware.RequireFlag("STAFFMANAGEMENT"), h.EditUserFlags)             // ~ Edit user access flags (similar with rank flags)
 	groupAdmin.Delete("/reset/:id", middleware.RequireFlag("SENIOR"), h.ResetUserSensetiveData)               // ~ Reset user sensetive data
 	groupAdmin.Patch("/editbadges/:id", middleware.RequireFlag("SENIOR"), h.EditUserBadges)                   // ~ Edit user badges

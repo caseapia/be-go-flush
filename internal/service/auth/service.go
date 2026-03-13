@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/clients/discord"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
+	"github.com/caseapia/goproject-flush/internal/service/invite"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
-	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/internal/service/notifications"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/caseapia/goproject-flush/pkg/utils/hash"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/gookit/slog"
@@ -27,20 +29,26 @@ type Service struct {
 	repository mysql.Repository
 	logger     logger.Service
 	notifier   notifications.Service
+	invite     *invite.Service
 	discord    *discord.Client
 	cfg        *config.Config
 }
 
-func NewService(userRepo mysql.Repository, logger logger.Service, notifier notifications.Service, discord *discord.Client, cfg *config.Config) *Service {
-	return &Service{repository: userRepo, logger: logger, notifier: notifier, discord: discord, cfg: cfg}
+func NewService(userRepo mysql.Repository, logger logger.Service, invite *invite.Service, notifier notifications.Service, discord *discord.Client, cfg *config.Config) *Service {
+	return &Service{repository: userRepo, logger: logger, invite: invite, notifier: notifier, discord: discord, cfg: cfg}
 }
 
 var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}
 
-func (s *Service) Register(ctx *fiber.Ctx, name, invite, email, password, ip string) (*models.User, error) {
+func (s *Service) Register(ctx *fiber.Ctx, name, inviteCode, email, password, ip string) (*models.User, string, string, error) {
+	invite, err := s.invite.GetInviteByID(ctx.UserContext(), inviteCode)
+	if err != nil {
+		return nil, "", "", fiber.NewError(400, "invalid invite code")
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, err
+		return nil, "", "", fiber.NewError(400, "failed to hash password")
 	}
 
 	user := &models.User{
@@ -48,16 +56,52 @@ func (s *Service) Register(ctx *fiber.Ctx, name, invite, email, password, ip str
 		Email:        email,
 		Password:     string(hash),
 		TokenVersion: 1,
-		Status:       0,
+		Status:       enums.UserStatusActive,
 		RegisterIP:   ip,
+		InvitedBy:    &invite.CreatedBy,
 	}
 
-	newUser, err := s.repository.Create(ctx.UserContext(), s.repository.DB, user)
+	var newUser *models.User
+	var txErr error
+	s.repository.WithTx(ctx.UserContext(), func(tx bun.Tx) error {
+		newUser, txErr = s.repository.Create(ctx.UserContext(), tx, user)
+		if txErr != nil {
+			slog.WithData(slog.M{
+				"txerr":         txErr,
+				"txErr.Error()": txErr.Error(),
+			}).Debug("test reg")
+			if strings.Contains(txErr.Error(), "users.name") {
+				slog.Info("Returning custom user exists error")
+				return fiber.NewError(fiber.StatusConflict, "user already exists")
+			}
+			if strings.Contains(txErr.Error(), "users.email") {
+				slog.Info("Returning custom user exists error")
+				return fiber.NewError(fiber.StatusConflict, "email already exists")
+			}
+
+			slog.Info("Returning custom user exists error")
+			return fiber.NewError(fiber.StatusInternalServerError, txErr.Error())
+		}
+
+		txErr = s.invite.UseInvite(ctx.Context(), inviteCode, newUser.ID)
+		if txErr != nil {
+			return fiber.NewError(fiber.StatusInternalServerError, "failed to mark invite as used"+txErr.Error())
+		}
+
+		return nil
+	})
+	if txErr != nil {
+		return nil, "", "", txErr
+	}
+
+	s.logger.Log(ctx.UserContext(), enums.AdminAuthLogger, nil, &newUser.ID, enums.UserRegister, fmt.Sprintf("Invite code: %s | Invited by: %s", inviteCode, invite.Creator.Name))
+
+	accessToken, refreshToken, err := s.Login(ctx, name, password, string(ctx.Context().UserAgent()), ip)
 	if err != nil {
-		return nil, err
+		return newUser, "", "", fiber.NewError(fiber.StatusInternalServerError, "failed to log in after registration"+txErr.Error())
 	}
 
-	return newUser, nil
+	return newUser, accessToken, refreshToken, nil
 }
 
 func (s *Service) Login(ctx *fiber.Ctx, login, password, userAgent, ip string) (string, string, error) {
@@ -234,9 +278,15 @@ func (s *Service) SearchSessionsByUser(ctx *fiber.Ctx, sender models.User, userI
 	return sessions, txErr
 }
 
-func (s *Service) TerminateSession(ctx context.Context, sender models.User, sessionID string) (bool, error) {
+func (s *Service) TerminateSession(ctx context.Context, sender models.User, currentSession string, sessionID string) (bool, error) {
 	var err error
 	var state bool
+
+	// conditions
+	if currentSession == sessionID {
+		return false, fiber.NewError(fiber.StatusForbidden, "you cannot terminate your current session")
+	}
+
 	s.repository.WithTx(ctx, func(tx bun.Tx) error {
 		session, err := s.repository.SearchSessionByID(ctx, tx, sessionID)
 		if err != nil {

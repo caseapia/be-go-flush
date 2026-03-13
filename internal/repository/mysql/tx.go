@@ -20,7 +20,7 @@ func (r *Repository) WithTx(
 		if err != nil {
 			_ = tx.Rollback()
 			slog.WithData(slog.M{
-				"error": err,
+				"error": err.Error(),
 				"tx":    tx,
 			}).Error("error on transaction")
 			return

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/caseapia/goproject-flush/internal/models"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 	"github.com/uptrace/bun"
@@ -33,23 +33,15 @@ func (r *Repository) SearchUserByID(ctx context.Context, id uint64) (*models.Use
 		Model(u).
 		WherePK().
 		Relation("ActiveBan").
+		Relation("ActiveBan.Admin").
+		Relation("ActiveBan.Target").
+		Relation("InvitedByUser").
 		Scan(ctx)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, &fiber.Error{Code: 404, Message: "user not found"}
 		}
 		return nil, err
-	}
-
-	if u.ActiveBan != nil {
-		if err := r.DB.NewSelect().
-			Model(u.ActiveBan).
-			Relation("Admin").
-			Relation("Target").
-			WherePK().
-			Scan(ctx); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
 	}
 
 	u.Badges = make([]models.Badge, 0)
@@ -69,6 +61,7 @@ func (r *Repository) SearchUserByName(ctx context.Context, name string) (*models
 		Model(u).
 		Where("user.name = ?", name).
 		Relation("ActiveBan").
+		Relation("InvitedByUser").
 		Relation("ActiveBan.Admin").
 		Relation("ActiveBan.Target").
 		Limit(1).
@@ -99,6 +92,7 @@ func (r *Repository) SearchAllUsers(ctx context.Context) ([]models.User, error) 
 	err := r.DB.NewSelect().
 		Model(&users).
 		Relation("ActiveBan").
+		Relation("InvitedByUser").
 		Relation("ActiveBan.Admin").
 		Relation("ActiveBan.Target").
 		Scan(ctx)

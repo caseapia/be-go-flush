@@ -10,9 +10,9 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
-	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/internal/service/notifications"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
 	"github.com/uptrace/bun"
@@ -610,4 +610,32 @@ func (s *Service) PopulateBanList(ctx context.Context) (*[]models.Ban, error) {
 	}
 
 	return &bans, nil
+}
+
+func (s *Service) SetDonatePoints(ctx context.Context, senderID uint64, userID uint64, points int) (*models.User, error) {
+	u, err := s.repo.SearchUserByID(ctx, userID)
+	if err != nil {
+		return nil, fiber.NewError(fiber.StatusNotFound, "user not found")
+	}
+
+	var txErr error
+	txErr = s.repo.WithTx(ctx, func(tx bun.Tx) error {
+		u, err = s.repo.UpdateUser(ctx, tx, &models.User{
+			ID:           u.ID,
+			DonatePoints: points,
+		}, "donate_points")
+		if err != nil {
+			return err
+		}
+
+		addInfo := fmt.Sprintf("Before: %d\nAfter: %d", u.DonatePoints, points)
+		s.logger.Log(ctx, enums.StaffCommonLogger, &senderID, &userID, enums.SetDonatePoints, addInfo)
+
+		return nil
+	})
+	if txErr != nil {
+		return u, txErr
+	}
+
+	return u, err
 }

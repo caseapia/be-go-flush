@@ -9,9 +9,10 @@ import (
 	"github.com/caseapia/goproject-flush/internal/service/user"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
+
 )
 
 type Handler struct {
@@ -131,13 +132,14 @@ func (h *Handler) SearchSessionsByUser(c *fiber.Ctx) error {
 
 func (h *Handler) TerminateSession(c *fiber.Ctx) error {
 	sender := account.GetUserFromContext(c)
+	session := account.GetSessionIDFromContext(c)
 
 	var input *models.TerminateSessionRequest
 	if err := c.BodyParser(&input); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	state, err := h.auth.TerminateSession(c.UserContext(), *sender, input.SessionID)
+	state, err := h.auth.TerminateSession(c.UserContext(), *sender, session, input.SessionID)
 	if err != nil {
 		return err
 	}
@@ -432,4 +434,27 @@ func (h *Handler) PopulateBanList(c *fiber.Ctx) error {
 	}
 
 	return utils.Success(c, 200, b)
+}
+
+func (h *Handler) SetDonatePoints(c *fiber.Ctx) error {
+	sender := account.GetUserFromContext(c)
+	id, err := account.GetUserId(c)
+	if err != nil {
+		return err
+	}
+
+	var input models.SetDonatePointsRequest
+	if err := c.BodyParser(&input); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid body")
+	}
+
+	u, err := h.service.SetDonatePoints(c.UserContext(), sender.ID, id, input.Points)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, 200, fiber.Map{
+		"user":      u,
+		"newPoints": input.Points,
+	})
 }

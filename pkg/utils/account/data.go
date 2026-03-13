@@ -20,6 +20,10 @@ func GetUserFromContext(c *fiber.Ctx) *models.User {
 	return c.Locals("user").(*models.User)
 }
 
+func GetSessionIDFromContext(c *fiber.Ctx) string {
+	return c.Locals("session_id").(string)
+}
+
 func GetUserRanksFromContext(c *fiber.Ctx) (staffRank *models.Rank, developerRank *models.Rank) {
 	val := c.Locals("rank")
 	if val == nil {

@@ -14,26 +14,26 @@ import (
 	"github.com/caseapia/goproject-flush/internal/clients/discord"
 	database "github.com/caseapia/goproject-flush/internal/db"
 	"github.com/caseapia/goproject-flush/internal/handler/auth"
+	"github.com/caseapia/goproject-flush/internal/handler/badges"
 	"github.com/caseapia/goproject-flush/internal/handler/changelog"
 	"github.com/caseapia/goproject-flush/internal/handler/invite"
 	"github.com/caseapia/goproject-flush/internal/handler/logger"
+	"github.com/caseapia/goproject-flush/internal/handler/notifications"
 	"github.com/caseapia/goproject-flush/internal/handler/ranks"
+	"github.com/caseapia/goproject-flush/internal/handler/tickets"
 	"github.com/caseapia/goproject-flush/internal/handler/user"
-	"github.com/caseapia/goproject-flush/internal/handler/user/badges"
-	"github.com/caseapia/goproject-flush/internal/handler/user/notifications"
-	"github.com/caseapia/goproject-flush/internal/handler/user/tickets"
 	"github.com/caseapia/goproject-flush/internal/middleware"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	mysqlRepo "github.com/caseapia/goproject-flush/internal/repository/mysql"
 	authService "github.com/caseapia/goproject-flush/internal/service/auth"
+	badgesService "github.com/caseapia/goproject-flush/internal/service/badges"
 	changelogService "github.com/caseapia/goproject-flush/internal/service/changelog"
 	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
 	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
+	notifyService "github.com/caseapia/goproject-flush/internal/service/notifications"
 	ranksService "github.com/caseapia/goproject-flush/internal/service/ranks"
+	ticketsService "github.com/caseapia/goproject-flush/internal/service/tickets"
 	userService "github.com/caseapia/goproject-flush/internal/service/user"
-	badgesService "github.com/caseapia/goproject-flush/internal/service/user/badges"
-	notifyService "github.com/caseapia/goproject-flush/internal/service/user/notifications"
-	ticketsService "github.com/caseapia/goproject-flush/internal/service/user/tickets"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gookit/slog"
@@ -81,12 +81,12 @@ func NewApp() (*fiber.App, error) {
 	ranksSrv := ranksService.NewService(*mainRepo, *loggerSrv)
 	userSrv := userService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 	inviteSrv := inviteService.NewService(*mainRepo, *loggerSrv)
-	authSrv := authService.NewService(*mainRepo, *loggerSrv, *notifySrv, discordClient, cfg)
+	authSrv := authService.NewService(*mainRepo, *loggerSrv, inviteSrv, *notifySrv, discordClient, cfg)
 	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
 	changelogSrv := changelogService.NewService(*mainRepo, *loggerSrv, *notifySrv)
 
 	badgesHandler := badges.NewHandler(badgesSrv)
-	authHandler := auth.NewHandler(authSrv, inviteSrv)
+	authHandler := auth.NewHandler(authSrv)
 	userHandler := user.NewUserHandler(userSrv, ranksSrv, authSrv)
 	inviteHandler := invite.NewHandler(inviteSrv)
 	loggerHandler := logger.NewHandler(loggerSrv)
@@ -102,14 +102,15 @@ func NewApp() (*fiber.App, error) {
 		Concurrency:  256 * 1024,
 		ProxyHeader:  fiber.HeaderXForwardedFor,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			code := fiber.StatusInternalServerError
-
 			if e, ok := err.(*fiber.Error); ok {
-				code = e.Code
+				return c.Status(e.Code).JSON(fiber.Map{
+					"error": e.Message,
+					"code":  e.Code,
+				})
 			}
 
-			return c.Status(code).JSON(fiber.Map{
-				"code":    code,
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"code":    fiber.StatusInternalServerError,
 				"message": err.Error(),
 			})
 		},

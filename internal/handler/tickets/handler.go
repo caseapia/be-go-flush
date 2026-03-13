@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/caseapia/goproject-flush/internal/models"
-	"github.com/caseapia/goproject-flush/internal/service/user/tickets"
+	"github.com/caseapia/goproject-flush/internal/service/tickets"
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"

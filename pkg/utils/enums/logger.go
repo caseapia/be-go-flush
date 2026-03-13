@@ -57,4 +57,6 @@ const (
 	UnlinkDiscord          LoggerAction = "unlinked his discord"
 	ForceUnlinkUserDiscord LoggerAction = "force unlinked discord"
 	CheckedSessions        LoggerAction = "just checked sessions"
+	SetDonatePoints        LoggerAction = "has set donate points"
+	BoughtForPoints        LoggerAction = "has bought for points"
 )

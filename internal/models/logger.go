@@ -3,7 +3,7 @@ package models
 import (
 	"time"
 
-	"github.com/caseapia/goproject-flush/pkg/utils/models/enums"
+	"github.com/caseapia/goproject-flush/pkg/utils/enums"
 	"github.com/uptrace/bun"
 )
 
@@ -11,7 +11,7 @@ type BaseLog struct {
 	ID             uint64    `bun:"id,pk,autoincrement" json:"id"`
 	Date           time.Time `bun:"date,notnull" json:"date"`
 	Action         string    `bun:"action,notnull" json:"action"`
-	AdditionalInfo *string   `bun:"additional_information" json:"additionalInfo,omitempty"`
+	AdditionalInfo *string   `bun:"additional_information" json:"additional_info,omitempty"`
 }
 
 type CommonLog struct {
@@ -55,8 +55,8 @@ type AuthLog struct {
 }
 
 type LogPopulate struct {
-	StartDate string           `json:"dateStart"`
-	EndDate   string           `json:"dateEnd"`
+	StartDate string           `json:"date_start"`
+	EndDate   string           `json:"date_end"`
 	Type      enums.LoggerType `json:"type"`
 	Keywords  *string          `json:"keywords"`
 }

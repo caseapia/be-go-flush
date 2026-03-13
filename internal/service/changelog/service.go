@@ -6,7 +6,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
-	"github.com/caseapia/goproject-flush/internal/service/user/notifications"
+	"github.com/caseapia/goproject-flush/internal/service/notifications"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
 	"github.com/uptrace/bun"
