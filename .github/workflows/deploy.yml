@@ -336,6 +336,9 @@ jobs:
             LOG_TYPE="production"
           fi
 
+          sudo sed -i 's|^WorkingDirectory=.*|WorkingDirectory=/opt/flush/bin|' /etc/systemd/system/flush-api.service
+          echo "Changed WorkingDirectory to /opt/flush/bin"
+
           # Проверяем окружение перед запуском
           echo "=== Pre-start checks ==="
           ls -lah /opt/flush/bin/flush-api
