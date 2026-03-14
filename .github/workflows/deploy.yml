@@ -195,10 +195,24 @@ jobs:
           ROLLBACK_MODE="${{ github.event.inputs.rollback }}"
           DEBUG_MODE="${{ github.event.inputs.debug }}"
 
+          echo "=== Testing SSH connection ==="
+          if ! ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+              -o ConnectTimeout=10 \
+              -o StrictHostKeyChecking=yes \
+              ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+              "echo 'SSH connection OK'"; then
+            echo "❌ SSH connection failed!"
+            exit 1
+          fi
+
+          echo "=== Starting deployment ==="
+
           # Выполняем SSH команды и сохраняем вывод во временный файл
+          set +e  # Не прерывать на ошибках, чтобы увидеть что происходит
           ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+            -o ConnectTimeout=30 \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "bash -s $ROLLBACK_MODE $DEBUG_MODE" << 'ENDSSH' > /tmp/deploy_output.txt
+            "bash -s $ROLLBACK_MODE $DEBUG_MODE" << 'ENDSSH' > /tmp/deploy_output.txt 2>&1
 
           set -e
 
@@ -347,6 +361,21 @@ jobs:
           echo "=== Deployment completed successfully ==="
           ENDSSH
 
+          SSH_EXIT_CODE=$?
+          set -e
+
+          echo ""
+          echo "=== SSH Exit Code: $SSH_EXIT_CODE ==="
+          echo "=== Full deployment log ==="
+          cat /tmp/deploy_output.txt
+          echo "=== End of deployment log ==="
+          echo ""
+
+          if [ $SSH_EXIT_CODE -ne 0 ]; then
+            echo "❌ SSH command failed with exit code $SSH_EXIT_CODE"
+            exit 1
+          fi
+
           # Читаем вывод и парсим переменные
           while IFS='=' read -r key value; do
             # Пропускаем строки без = или с пустым ключом
@@ -362,10 +391,6 @@ jobs:
               echo "📊 ${key}: ${clean_value}"
             fi
           done < /tmp/deploy_output.txt
-
-          echo ""
-          echo "=== Full deployment log ==="
-          cat /tmp/deploy_output.txt
 
       - name: Post-deployment smoke tests
         id: smoke_tests
