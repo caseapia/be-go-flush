@@ -222,6 +222,14 @@ jobs:
           echo "=== Deployment started ==="
           START_TIME=$(date +%s)
 
+          # Проверяем наличие необходимых файлов
+          echo "=== Checking required files ==="
+          if [ -f /opt/flush/bin/services.json ]; then
+            echo "✓ services.json found"
+          else
+            echo "⚠️ services.json not found - application may fail to start!"
+          fi
+
           # Сохраняем информацию о текущей версии
           if [ -f /opt/flush/bin/flush-api ]; then
             CURRENT_VERSION=$(md5sum /opt/flush/bin/flush-api | awk '{print $1}')
@@ -237,8 +245,21 @@ jobs:
           if [ "$ROLLBACK_MODE" = "true" ]; then
             echo "=== ROLLBACK MODE ==="
             if [ -f /opt/flush/bin/flush-api.bak ]; then
+              # Сохраняем services.json если есть
+              if [ -f /opt/flush/bin/services.json ]; then
+                cp /opt/flush/bin/services.json /tmp/services.json.preserve
+                echo "services.json preserved"
+              fi
+              
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               chmod 750 /opt/flush/bin/flush-api
+              
+              # Восстанавливаем services.json
+              if [ -f /tmp/services.json.preserve ]; then
+                mv /tmp/services.json.preserve /opt/flush/bin/services.json
+                echo "services.json restored"
+              fi
+              
               echo "Rolled back to previous version"
               DEPLOYMENT_TYPE="rollback"
             else
@@ -246,6 +267,12 @@ jobs:
               exit 1
             fi
           else
+            # Сохраняем services.json перед заменой бинарника
+            if [ -f /opt/flush/bin/services.json ]; then
+              cp /opt/flush/bin/services.json /tmp/services.json.preserve
+              echo "services.json preserved"
+            fi
+            
             # Бэкап текущей версии
             if [ -f /opt/flush/bin/flush-api ]; then
               cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
@@ -256,6 +283,13 @@ jobs:
             mv /tmp/flush-api-new /opt/flush/bin/flush-api
             chmod 750 /opt/flush/bin/flush-api
             echo "New binary installed"
+            
+            # Восстанавливаем services.json
+            if [ -f /tmp/services.json.preserve ]; then
+              mv /tmp/services.json.preserve /opt/flush/bin/services.json
+              echo "services.json restored"
+            fi
+            
             DEPLOYMENT_TYPE="deploy"
           fi
 
@@ -268,6 +302,17 @@ jobs:
             LOG_TYPE="production"
           fi
 
+          # Проверяем окружение перед запуском
+          echo "=== Pre-start checks ==="
+          ls -lah /opt/flush/bin/flush-api
+          echo "Binary permissions: $(stat -c '%a' /opt/flush/bin/flush-api)"
+          if [ -f /opt/flush/bin/services.json ]; then
+            echo "services.json present: YES"
+            echo "services.json size: $(stat -c '%s' /opt/flush/bin/services.json) bytes"
+          else
+            echo "⚠️⚠️⚠️ services.json present: NO - THIS WILL LIKELY CAUSE FAILURE"
+          fi
+
           # Перезагружаем и запускаем
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
@@ -278,16 +323,35 @@ jobs:
           # Проверяем что сервис запустился
           if ! sudo systemctl is-active --quiet flush-api; then
             echo "❌ Service failed to start!"
-            echo "=== Last 50 lines of logs ==="
+            echo ""
+            echo "=== SERVICE STATUS ==="
+            sudo systemctl status flush-api --no-pager || true
+            echo ""
+            echo "=== APPLICATION LOGS (stdout/stderr) ==="
+            sudo journalctl -u flush-api -n 100 --no-pager -o cat
+            echo ""
+            echo "=== SYSTEMD LOGS ==="
             sudo journalctl -u flush-api -n 50 --no-pager
             
             if [ -f /opt/flush/bin/flush-api.bak ]; then
+              echo ""
               echo "=== Auto-rollback triggered ==="
+              
+              # Восстанавливаем бэкап
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              
+              # Восстанавливаем services.json если был сохранён
+              if [ -f /tmp/services.json.preserve ]; then
+                mv /tmp/services.json.preserve /opt/flush/bin/services.json
+              fi
+              
               sudo systemctl restart flush-api
               sleep 5
               if sudo systemctl is-active --quiet flush-api; then
                 echo "✅ Rollback successful"
+              else
+                echo "❌ Rollback also failed!"
+                sudo journalctl -u flush-api -n 20 --no-pager -o cat
               fi
             fi
             
@@ -316,11 +380,19 @@ jobs:
 
           if [ "$STATUS" != "200" ]; then
             echo "❌ Health check failed after $MAX_RETRIES attempts"
-            sudo journalctl -u flush-api -n 50 --no-pager
+            echo ""
+            echo "=== APPLICATION LOGS ==="
+            sudo journalctl -u flush-api -n 100 --no-pager -o cat
             
             if [ -f /opt/flush/bin/flush-api.bak ]; then
+              echo ""
               echo "=== Auto-rollback triggered ==="
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
+              
+              if [ -f /tmp/services.json.preserve ]; then
+                mv /tmp/services.json.preserve /opt/flush/bin/services.json
+              fi
+              
               sudo systemctl restart flush-api
             fi
             
