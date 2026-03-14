@@ -181,39 +181,25 @@ jobs:
             echo "⚠️ Warning: Service is not responding correctly before deployment"
           fi
 
-      - name: Upload binary
+      - name: Upload binary and configs
         if: ${{ github.event.inputs.rollback != 'true' }}
         run: |
+          echo "Uploading binary..."
           scp -P ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
             ${{ env.BINARY_NAME }} ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/flush-api-new
 
-          echo "Binary uploaded successfully"
+          echo "Uploading services.json..."
+          if [ -f services.json ]; then
+            scp -P ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+              services.json ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/services.json.new
+            echo "✓ services.json uploaded"
+          else
+            echo "❌ services.json not found in repository!"
+            exit 1
+          fi
 
-      - name: Investigate services.json location
-        run: |
-          ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+          echo "All files uploaded successfully"
 
-          echo "=== Searching for services.json ==="
-          find /opt/flush -name "services.json" 2>/dev/null || echo "Not found in /opt/flush"
-          find /etc -name "services.json" 2>/dev/null || echo "Not found in /etc"
-          find /var -name "services.json" 2>/dev/null || echo "Not found in /var"
-
-          echo ""
-          echo "=== Current working directory of running process ==="
-          ps aux | grep flush-api | grep -v grep
-          sudo lsof -p $(pgrep flush-api) | grep -E '(cwd|services\.json)' || echo "Process not found or no file handles"
-
-          echo ""
-          echo "=== Environment variables of running process ==="
-          sudo cat /proc/$(pgrep flush-api)/environ | tr '\0' '\n' | grep -i service || echo "No service-related env vars"
-
-          echo ""
-          echo "=== Files in /opt/flush/ ==="
-          ls -lah /opt/flush/
-          ls -lah /opt/flush/bin/ || echo "bin directory not found"
-
-          ENDSSH
       - name: Deploy and restart service
         id: deploy_step
         run: |
@@ -250,9 +236,10 @@ jobs:
           # Проверяем наличие необходимых файлов
           echo "=== Checking required files ==="
           if [ -f /opt/flush/bin/services.json ]; then
-            echo "✓ services.json found"
+            echo "✓ services.json found (current)"
+            echo "  Size: $(stat -c '%s' /opt/flush/bin/services.json) bytes"
           else
-            echo "⚠️ services.json not found - application may fail to start!"
+            echo "⚠️ services.json not found on server (first deploy?)"
           fi
 
           # Сохраняем информацию о текущей версии
@@ -270,19 +257,15 @@ jobs:
           if [ "$ROLLBACK_MODE" = "true" ]; then
             echo "=== ROLLBACK MODE ==="
             if [ -f /opt/flush/bin/flush-api.bak ]; then
-              # Сохраняем services.json если есть
-              if [ -f /opt/flush/bin/services.json ]; then
-                cp /opt/flush/bin/services.json /tmp/services.json.preserve
-                echo "services.json preserved"
-              fi
-              
+              # Восстанавливаем бэкап бинарника
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               chmod 750 /opt/flush/bin/flush-api
               
-              # Восстанавливаем services.json
-              if [ -f /tmp/services.json.preserve ]; then
-                mv /tmp/services.json.preserve /opt/flush/bin/services.json
-                echo "services.json restored"
+              # Восстанавливаем бэкап services.json
+              if [ -f /opt/flush/bin/services.json.bak ]; then
+                mv /opt/flush/bin/services.json.bak /opt/flush/bin/services.json
+                chmod 640 /opt/flush/bin/services.json
+                echo "services.json rolled back"
               fi
               
               echo "Rolled back to previous version"
@@ -292,16 +275,15 @@ jobs:
               exit 1
             fi
           else
-            # Сохраняем services.json перед заменой бинарника
-            if [ -f /opt/flush/bin/services.json ]; then
-              cp /opt/flush/bin/services.json /tmp/services.json.preserve
-              echo "services.json preserved"
-            fi
-            
-            # Бэкап текущей версии
+            # Бэкап текущих файлов
             if [ -f /opt/flush/bin/flush-api ]; then
               cp /opt/flush/bin/flush-api /opt/flush/bin/flush-api.bak
-              echo "Backup created"
+              echo "Binary backup created"
+            fi
+            
+            if [ -f /opt/flush/bin/services.json ]; then
+              cp /opt/flush/bin/services.json /opt/flush/bin/services.json.bak
+              echo "services.json backup created"
             fi
             
             # Устанавливаем новую версию
@@ -309,10 +291,13 @@ jobs:
             chmod 750 /opt/flush/bin/flush-api
             echo "New binary installed"
             
-            # Восстанавливаем services.json
-            if [ -f /tmp/services.json.preserve ]; then
-              mv /tmp/services.json.preserve /opt/flush/bin/services.json
-              echo "services.json restored"
+            # Устанавливаем новый services.json
+            if [ -f /tmp/services.json.new ]; then
+              mv /tmp/services.json.new /opt/flush/bin/services.json
+              chmod 640 /opt/flush/bin/services.json
+              echo "services.json installed"
+            else
+              echo "⚠️ services.json.new not found in /tmp - using existing or none"
             fi
             
             DEPLOYMENT_TYPE="deploy"
@@ -331,11 +316,13 @@ jobs:
           echo "=== Pre-start checks ==="
           ls -lah /opt/flush/bin/flush-api
           echo "Binary permissions: $(stat -c '%a' /opt/flush/bin/flush-api)"
+
           if [ -f /opt/flush/bin/services.json ]; then
-            echo "services.json present: YES"
-            echo "services.json size: $(stat -c '%s' /opt/flush/bin/services.json) bytes"
+            echo "✓ services.json present"
+            echo "  Size: $(stat -c '%s' /opt/flush/bin/services.json) bytes"
+            echo "  Permissions: $(stat -c '%a' /opt/flush/bin/services.json)"
           else
-            echo "⚠️⚠️⚠️ services.json present: NO - THIS WILL LIKELY CAUSE FAILURE"
+            echo "❌ services.json MISSING - deployment will likely fail!"
           fi
 
           # Перезагружаем и запускаем
@@ -362,12 +349,11 @@ jobs:
               echo ""
               echo "=== Auto-rollback triggered ==="
               
-              # Восстанавливаем бэкап
+              # Восстанавливаем бэкапы
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               
-              # Восстанавливаем services.json если был сохранён
-              if [ -f /tmp/services.json.preserve ]; then
-                mv /tmp/services.json.preserve /opt/flush/bin/services.json
+              if [ -f /opt/flush/bin/services.json.bak ]; then
+                mv /opt/flush/bin/services.json.bak /opt/flush/bin/services.json
               fi
               
               sudo systemctl restart flush-api
@@ -414,8 +400,8 @@ jobs:
               echo "=== Auto-rollback triggered ==="
               mv /opt/flush/bin/flush-api.bak /opt/flush/bin/flush-api
               
-              if [ -f /tmp/services.json.preserve ]; then
-                mv /tmp/services.json.preserve /opt/flush/bin/services.json
+              if [ -f /opt/flush/bin/services.json.bak ]; then
+                mv /opt/flush/bin/services.json.bak /opt/flush/bin/services.json
               fi
               
               sudo systemctl restart flush-api
