@@ -189,6 +189,31 @@ jobs:
 
           echo "Binary uploaded successfully"
 
+      - name: Investigate services.json location
+        run: |
+          ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+
+          echo "=== Searching for services.json ==="
+          find /opt/flush -name "services.json" 2>/dev/null || echo "Not found in /opt/flush"
+          find /etc -name "services.json" 2>/dev/null || echo "Not found in /etc"
+          find /var -name "services.json" 2>/dev/null || echo "Not found in /var"
+
+          echo ""
+          echo "=== Current working directory of running process ==="
+          ps aux | grep flush-api | grep -v grep
+          sudo lsof -p $(pgrep flush-api) | grep -E '(cwd|services\.json)' || echo "Process not found or no file handles"
+
+          echo ""
+          echo "=== Environment variables of running process ==="
+          sudo cat /proc/$(pgrep flush-api)/environ | tr '\0' '\n' | grep -i service || echo "No service-related env vars"
+
+          echo ""
+          echo "=== Files in /opt/flush/ ==="
+          ls -lah /opt/flush/
+          ls -lah /opt/flush/bin/ || echo "bin directory not found"
+
+          ENDSSH
       - name: Deploy and restart service
         id: deploy_step
         run: |
