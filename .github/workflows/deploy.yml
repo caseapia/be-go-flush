@@ -200,6 +200,39 @@ jobs:
 
           echo "All files uploaded successfully"
 
+      - name: Test binary manually before systemd
+        run: |
+          ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
+
+          echo "=== Testing binary manually ==="
+          cd /opt/flush/bin
+
+          echo "Files in directory:"
+          ls -la
+
+          echo ""
+          echo "=== Attempting to run binary directly ==="
+          timeout 5 ./flush-api || echo "Exit code: $?"
+
+          echo ""
+          echo "=== Checking .env file ==="
+          if [ -f .env ]; then
+            echo ".env exists, size: $(stat -c '%s' .env) bytes"
+          else
+            echo "⚠️ .env not found"
+          fi
+
+          if [ -f /opt/flush/.env ]; then
+            echo "Found .env in /opt/flush/"
+          fi
+
+          echo ""
+          echo "=== Checking systemd service config ==="
+          cat /etc/systemd/system/flush-api.service
+
+          ENDSSH
+
       - name: Deploy and restart service
         id: deploy_step
         run: |
