@@ -3,6 +3,7 @@ package changelog
 import (
 	"time"
 
+	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
@@ -13,20 +14,26 @@ import (
 )
 
 type Service struct {
-	repo     mysql.Repository
-	logger   logger.Service
-	notifier notifications.Service
+	repo           mysql.Repository
+	logger         logger.Service
+	notifier       notifications.Service
+	serviceManager *config.ServiceManager
 }
 
-func NewService(r mysql.Repository, l logger.Service, n notifications.Service) *Service {
+func NewService(r mysql.Repository, l logger.Service, n notifications.Service, serviceManager *config.ServiceManager) *Service {
 	return &Service{
-		repo:     r,
-		logger:   l,
-		notifier: n,
+		repo:           r,
+		logger:         l,
+		notifier:       n,
+		serviceManager: serviceManager,
 	}
 }
 
 func (s *Service) PopulateChangelog(ctx *fiber.Ctx, user *models.User) ([]models.Changelog, error) {
+	if s.serviceManager.IsServiceEnabled("changelogs") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	staffRank, developerRank := account.GetUserRanksFromContext(ctx)
 
 	isStaffUser := user.UserHasFlag("STAFF")
@@ -53,6 +60,10 @@ func (s *Service) PopulateChangelog(ctx *fiber.Ctx, user *models.User) ([]models
 }
 
 func (s *Service) CreateChangelog(ctx *fiber.Ctx, entry models.ChangelogCreationRequest, user *models.User) ([]models.Changelog, error) {
+	if s.serviceManager.IsServiceEnabled("changelogs") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	var txErr error
 	changelogs := make([]models.Changelog, 0)
 
@@ -86,6 +97,10 @@ func (s *Service) CreateChangelog(ctx *fiber.Ctx, entry models.ChangelogCreation
 }
 
 func (s *Service) DeleteChangelog(ctx *fiber.Ctx, id uint64) ([]models.Changelog, error) {
+	if s.serviceManager.IsServiceEnabled("changelogs") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	var txErr error
 	changelogs := make([]models.Changelog, 0)
 

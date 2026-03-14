@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
@@ -17,20 +18,26 @@ import (
 )
 
 type Service struct {
-	repo   mysql.Repository
-	notify notifications.Service
-	logger logger.Service
+	repo           mysql.Repository
+	notify         notifications.Service
+	logger         logger.Service
+	serviceManager *config.ServiceManager
 }
 
-func NewService(r mysql.Repository, n notifications.Service, l logger.Service) *Service {
+func NewService(r mysql.Repository, n notifications.Service, l logger.Service, serviceManager *config.ServiceManager) *Service {
 	return &Service{
-		repo:   r,
-		notify: n,
-		logger: l,
+		repo:           r,
+		notify:         n,
+		logger:         l,
+		serviceManager: serviceManager,
 	}
 }
 
 func (s *Service) createTicketAction(ctx context.Context, ticketID, authorID uint64, action string) ([]models.TicketAction, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	actions, err := s.repo.CreateTicketAction(ctx, s.repo.DB, models.TicketAction{
 		CreatedAt: time.Now(),
 		TicketID:  ticketID,
@@ -45,6 +52,10 @@ func (s *Service) createTicketAction(ctx context.Context, ticketID, authorID uin
 }
 
 func (s *Service) SearchTickets(ctx context.Context, user *models.User) ([]models.Ticket, int, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, 0, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	staffRank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, 0, err
@@ -83,6 +94,10 @@ func (s *Service) SearchTickets(ctx context.Context, user *models.User) ([]model
 }
 
 func (s *Service) PopulateTicket(ctx context.Context, ticketID uint64, user *models.User) (*models.TicketResponse, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	ticket, err := s.repo.PopulateTicket(ctx, ticketID)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
@@ -126,6 +141,10 @@ func (s *Service) PopulateTicket(ctx context.Context, ticketID uint64, user *mod
 }
 
 func (s *Service) PopulateAllUserTickets(ctx context.Context, userID uint64) ([]models.Ticket, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	tickets, err := s.repo.PopulateAllUserTickets(ctx, userID)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())
@@ -135,6 +154,10 @@ func (s *Service) PopulateAllUserTickets(ctx context.Context, userID uint64) ([]
 }
 
 func (s *Service) CreateTicket(ctx context.Context, user models.User, title, category, message string) (*models.Ticket, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	// parameters
 	categories := []string{
 		"Technical Support",
@@ -195,6 +218,10 @@ func (s *Service) CreateTicket(ctx context.Context, user models.User, title, cat
 }
 
 func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket, user *models.User, content string) (*models.TicketResponse, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, err
@@ -259,6 +286,10 @@ func (s *Service) CreateTicketMessage(ctx context.Context, ticket *models.Ticket
 }
 
 func (s *Service) TicketAssignment(ctx context.Context, ticketID uint64, user *models.User) (*models.TicketResponse, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, err
@@ -300,6 +331,10 @@ func (s *Service) TicketAssignment(ctx context.Context, ticketID uint64, user *m
 }
 
 func (s *Service) CloseTicket(ctx context.Context, ticketID uint64, user models.User) (*models.TicketResponse, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	rank, err := s.repo.SearchRankByID(ctx, user.StaffRank)
 	if err != nil {
 		return nil, err
@@ -343,6 +378,10 @@ func (s *Service) CloseTicket(ctx context.Context, ticketID uint64, user models.
 }
 
 func (s *Service) ChangeTicketCategory(ctx context.Context, ticketID uint64, newCategory string, user *models.User) (*models.TicketResponse, error) {
+	if s.serviceManager.IsServiceEnabled("tickets") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	ticket, err := s.repo.PopulateTicket(ctx, ticketID)
 	if err != nil {
 		return nil, err

@@ -59,4 +59,6 @@ const (
 	CheckedSessions        LoggerAction = "just checked sessions"
 	SetDonatePoints        LoggerAction = "has set donate points"
 	BoughtForPoints        LoggerAction = "has bought for points"
+	EnableService          LoggerAction = "has enabled service"
+	DisableService         LoggerAction = "has disable service"
 )

@@ -6,14 +6,6 @@ import (
 	"github.com/gookit/slog"
 )
 
-type Config struct {
-	DiscordClientID              string
-	DiscordClientSecret          string
-	DiscordLocalRedirectURI      string
-	DiscordProductionRedirectURI string
-	AppMode                      string
-}
-
 func Load() *Config {
 	cfg := &Config{
 		DiscordClientID:              os.Getenv("DISCORD_CLIENT_ID"),

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
@@ -14,15 +15,20 @@ import (
 )
 
 type Service struct {
-	repo   mysql.Repository
-	logger logger.Service
+	repo           mysql.Repository
+	logger         logger.Service
+	serviceManager *config.ServiceManager
 }
 
-func NewService(r mysql.Repository, l logger.Service) *Service {
-	return &Service{repo: r, logger: l}
+func NewService(r mysql.Repository, l logger.Service, serviceManager *config.ServiceManager) *Service {
+	return &Service{repo: r, logger: l, serviceManager: serviceManager}
 }
 
 func (s *Service) SendNotification(ctx context.Context, userID uint64, notifyType enums.NotificationsType, title, text string, senderID *uint64) {
+	if s.serviceManager.IsServiceEnabled("notifications") != true {
+		return
+	}
+
 	s.repo.WithTx(ctx, func(tx bun.Tx) error {
 		err := s.repo.SendNotification(
 			ctx,
@@ -50,6 +56,10 @@ func (s *Service) SendNotification(ctx context.Context, userID uint64, notifyTyp
 }
 
 func (s *Service) PopulateNotifications(ctx context.Context, userID uint64, senderID uint64) ([]models.Notification, error) {
+	if s.serviceManager.IsServiceEnabled("notifications") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	notifications, err := s.repo.PopulateNotifications(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -63,6 +73,10 @@ func (s *Service) PopulateNotifications(ctx context.Context, userID uint64, send
 }
 
 func (s *Service) ReadNotifications(ctx context.Context, userID uint64) ([]models.Notification, error) {
+	if s.serviceManager.IsServiceEnabled("notifications") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	// Notifications list
 	var notifications []models.Notification
 	var err error
@@ -80,6 +94,10 @@ func (s *Service) ReadNotifications(ctx context.Context, userID uint64) ([]model
 }
 
 func (s *Service) RemoveNotification(ctx context.Context, userID, senderID, notifyID uint64) (bool, error) {
+	if s.serviceManager.IsServiceEnabled("notifications") != true {
+		return false, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	var isDeleted bool
 	var err error
 
@@ -100,6 +118,10 @@ func (s *Service) RemoveNotification(ctx context.Context, userID, senderID, noti
 }
 
 func (s *Service) ClearNotifications(ctx context.Context, userID uint64) ([]models.Notification, error) {
+	if s.serviceManager.IsServiceEnabled("notifications") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	notifications, err := s.repo.ClearNotifications(ctx, s.repo.DB, userID)
 	if err != nil {
 		return nil, fiber.NewError(fiber.StatusInternalServerError, err.Error())

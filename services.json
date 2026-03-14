@@ -1,0 +1,30 @@
+{
+"version": 37,
+"services": {
+"changelogs": {
+"enabled": true,
+"updated_at": "2026-03-14T05:32:15.6831666+03:00",
+"updated_by": "dontkillme"
+},
+"invites": {
+"enabled": true,
+"updated_at": "2026-03-14T05:28:36.7195901+03:00",
+"updated_by": "dontkillme"
+},
+"notifications": {
+"enabled": true,
+"updated_at": "2026-03-14T05:28:00.8608751+03:00",
+"updated_by": "dontkillme"
+},
+"register": {
+"enabled": true,
+"updated_at": "2026-03-14T05:16:18.0852793+03:00",
+"updated_by": "dontkillme"
+},
+"tickets": {
+"enabled": true,
+"updated_at": "2026-03-14T05:10:36.4466679+03:00",
+"updated_by": "dontkillme"
+}
+}
+}

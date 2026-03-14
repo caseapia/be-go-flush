@@ -26,21 +26,26 @@ import (
 )
 
 type Service struct {
-	repository mysql.Repository
-	logger     logger.Service
-	notifier   notifications.Service
-	invite     *invite.Service
-	discord    *discord.Client
-	cfg        *config.Config
+	repository     mysql.Repository
+	logger         logger.Service
+	notifier       notifications.Service
+	invite         *invite.Service
+	discord        *discord.Client
+	cfg            *config.Config
+	serviceManager *config.ServiceManager
 }
 
-func NewService(userRepo mysql.Repository, logger logger.Service, invite *invite.Service, notifier notifications.Service, discord *discord.Client, cfg *config.Config) *Service {
-	return &Service{repository: userRepo, logger: logger, invite: invite, notifier: notifier, discord: discord, cfg: cfg}
+func NewService(userRepo mysql.Repository, logger logger.Service, invite *invite.Service, notifier notifications.Service, discord *discord.Client, cfg *config.Config, serviceManager *config.ServiceManager) *Service {
+	return &Service{repository: userRepo, logger: logger, invite: invite, notifier: notifier, discord: discord, cfg: cfg, serviceManager: serviceManager}
 }
 
 var ErrInvalidToken = &fiber.Error{Code: 400, Message: "invalid token"}
 
 func (s *Service) Register(ctx *fiber.Ctx, name, inviteCode, email, password, ip string) (*models.User, string, string, error) {
+	if s.serviceManager.IsServiceEnabled("register") != true {
+		return nil, "", "", fiber.NewError(403, "service disabled by an admin")
+	}
+
 	invite, err := s.invite.GetInviteByID(ctx.UserContext(), inviteCode)
 	if err != nil {
 		return nil, "", "", fiber.NewError(400, "invalid invite code")

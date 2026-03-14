@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/models"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
@@ -15,15 +16,20 @@ import (
 )
 
 type Service struct {
-	repo   mysql.Repository
-	logger logger.Service
+	repo           mysql.Repository
+	logger         logger.Service
+	serviceManager *config.ServiceManager
 }
 
-func NewService(inviteRepo mysql.Repository, logger logger.Service) *Service {
-	return &Service{repo: inviteRepo, logger: logger}
+func NewService(inviteRepo mysql.Repository, logger logger.Service, serviceManager *config.ServiceManager) *Service {
+	return &Service{repo: inviteRepo, logger: logger, serviceManager: serviceManager}
 }
 
 func (s *Service) GetInviteCodes(ctx context.Context) ([]models.Invite, error) {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	invites, err := s.repo.SearchAllInvites(ctx)
 	if err != nil {
 		slog.WithData(slog.M{
@@ -36,6 +42,10 @@ func (s *Service) GetInviteCodes(ctx context.Context) ([]models.Invite, error) {
 }
 
 func (s *Service) GetInviteByID(ctx context.Context, inviteID string) (*models.Invite, error) {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	inviteInfo, err := s.repo.SearchInviteByCode(ctx, inviteID)
 	if err != nil {
 		return nil, fiber.NewError(500, err.Error())
@@ -45,6 +55,10 @@ func (s *Service) GetInviteByID(ctx context.Context, inviteID string) (*models.I
 }
 
 func (s *Service) CreateInvite(ctx context.Context, createdBy uint64) (*models.Invite, error) {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	code, err := inviteutils.GenerateCode()
 	if err != nil {
 		return nil, err
@@ -68,6 +82,10 @@ func (s *Service) CreateInvite(ctx context.Context, createdBy uint64) (*models.I
 }
 
 func (s *Service) ValidateInvite(ctx context.Context, code string) (*models.Invite, error) {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return nil, fiber.NewError(403, "service disabled by an admin")
+	}
+
 	invite, err := s.repo.SearchInviteByCode(ctx, code)
 	if err != nil {
 		return nil, err
@@ -81,6 +99,10 @@ func (s *Service) ValidateInvite(ctx context.Context, code string) (*models.Invi
 }
 
 func (s *Service) UseInvite(ctx context.Context, code string, userID uint64) error {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return fiber.NewError(403, "service disabled by an admin")
+	}
+
 	invite, err := s.repo.SearchInviteByCode(ctx, code)
 	if err != nil {
 		return err
@@ -94,6 +116,10 @@ func (s *Service) UseInvite(ctx context.Context, code string, userID uint64) err
 }
 
 func (s *Service) DeleteInvite(ctx context.Context, adminID uint64, inviteID uint64) error {
+	if s.serviceManager.IsServiceEnabled("invites") != true {
+		return fiber.NewError(403, "service disabled by an admin")
+	}
+
 	oldInvite, err := s.repo.SearchInviteByID(ctx, inviteID)
 	if err != nil {
 		return err

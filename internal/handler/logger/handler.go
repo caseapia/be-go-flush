@@ -8,7 +8,6 @@ import (
 	"github.com/caseapia/goproject-flush/internal/utils"
 	"github.com/caseapia/goproject-flush/pkg/utils/account"
 	"github.com/gofiber/fiber/v2"
-
 )
 
 type Handler struct {
@@ -27,7 +26,6 @@ func (l *Handler) SearchLogs(c *fiber.Ctx) error {
 	_ = account.GetUserFromContext(c)
 
 	var input models.LogPopulate
-
 	if err := c.BodyParser(&input); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid request body")
 	}

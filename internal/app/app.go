@@ -16,6 +16,7 @@ import (
 	"github.com/caseapia/goproject-flush/internal/handler/auth"
 	"github.com/caseapia/goproject-flush/internal/handler/badges"
 	"github.com/caseapia/goproject-flush/internal/handler/changelog"
+	"github.com/caseapia/goproject-flush/internal/handler/developer"
 	"github.com/caseapia/goproject-flush/internal/handler/invite"
 	"github.com/caseapia/goproject-flush/internal/handler/logger"
 	"github.com/caseapia/goproject-flush/internal/handler/notifications"
@@ -28,6 +29,7 @@ import (
 	authService "github.com/caseapia/goproject-flush/internal/service/auth"
 	badgesService "github.com/caseapia/goproject-flush/internal/service/badges"
 	changelogService "github.com/caseapia/goproject-flush/internal/service/changelog"
+	developerService "github.com/caseapia/goproject-flush/internal/service/developer"
 	inviteService "github.com/caseapia/goproject-flush/internal/service/invite"
 	loggerService "github.com/caseapia/goproject-flush/internal/service/logger"
 	notifyService "github.com/caseapia/goproject-flush/internal/service/notifications"
@@ -74,16 +76,21 @@ func NewApp() (*fiber.App, error) {
 		}
 		os.Exit(0)
 	}
+	manager, err := config.NewServiceManager("services.json")
+	if err != nil {
+		return nil, err
+	}
 
 	loggerSrv := loggerService.NewService(*logsRepo)
 	badgesSrv := badgesService.NewService(*mainRepo, *loggerSrv)
-	notifySrv := notifyService.NewService(*mainRepo, *loggerSrv)
+	notifySrv := notifyService.NewService(*mainRepo, *loggerSrv, manager)
 	ranksSrv := ranksService.NewService(*mainRepo, *loggerSrv)
 	userSrv := userService.NewService(*mainRepo, *loggerSrv, *notifySrv)
-	inviteSrv := inviteService.NewService(*mainRepo, *loggerSrv)
-	authSrv := authService.NewService(*mainRepo, *loggerSrv, inviteSrv, *notifySrv, discordClient, cfg)
-	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv)
-	changelogSrv := changelogService.NewService(*mainRepo, *loggerSrv, *notifySrv)
+	inviteSrv := inviteService.NewService(*mainRepo, *loggerSrv, manager)
+	authSrv := authService.NewService(*mainRepo, *loggerSrv, inviteSrv, *notifySrv, discordClient, cfg, manager)
+	ticketsSrv := ticketsService.NewService(*mainRepo, *notifySrv, *loggerSrv, manager)
+	changelogSrv := changelogService.NewService(*mainRepo, *loggerSrv, *notifySrv, manager)
+	developerSrv := developerService.NewService(*mainRepo, *loggerSrv, manager)
 
 	badgesHandler := badges.NewHandler(badgesSrv)
 	authHandler := auth.NewHandler(authSrv)
@@ -94,6 +101,14 @@ func NewApp() (*fiber.App, error) {
 	notifyHandler := notifications.NewHandler(notifySrv)
 	ticketsHandler := tickets.NewHandler(ticketsSrv)
 	changelogHandler := changelog.NewHandler(changelogSrv)
+	developerHandler := developer.NewHandler(developerSrv)
+
+	events := manager.Subscribe()
+	go func() {
+		for event := range events {
+			slog.Infof("Service %s is now %v", event.ServiceName, event.Enabled)
+		}
+	}()
 
 	app := fiber.New(fiber.Config{
 		ReadTimeout:  10 * time.Second,
@@ -211,6 +226,7 @@ func NewApp() (*fiber.App, error) {
 	ticketsHandler.RegisterRoutes(private)
 	badgesHandler.RegisterRoutes(private)
 	changelogHandler.RegisterRoutes(private)
+	developerHandler.RegisterRoutes(private)
 
 	return app, nil
 }
