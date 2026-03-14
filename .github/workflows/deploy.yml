@@ -200,39 +200,6 @@ jobs:
 
           echo "All files uploaded successfully"
 
-      - name: Test binary manually before systemd
-        run: |
-          ssh -p ${{ secrets.DEPLOY_PORT }} -i ~/.ssh/deploy_key \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'ENDSSH'
-
-          echo "=== Testing binary manually ==="
-          cd /opt/flush/bin
-
-          echo "Files in directory:"
-          ls -la
-
-          echo ""
-          echo "=== Attempting to run binary directly ==="
-          timeout 5 ./flush-api || echo "Exit code: $?"
-
-          echo ""
-          echo "=== Checking .env file ==="
-          if [ -f .env ]; then
-            echo ".env exists, size: $(stat -c '%s' .env) bytes"
-          else
-            echo "⚠️ .env not found"
-          fi
-
-          if [ -f /opt/flush/.env ]; then
-            echo "Found .env in /opt/flush/"
-          fi
-
-          echo ""
-          echo "=== Checking systemd service config ==="
-          cat /etc/systemd/system/flush-api.service
-
-          ENDSSH
-
       - name: Deploy and restart service
         id: deploy_step
         run: |
@@ -284,8 +251,32 @@ jobs:
           fi
 
           # Останавливаем сервис
+          echo "=== Stopping service ==="
           sudo systemctl stop flush-api
-          echo "Service stopped"
+          echo "Systemd stop command sent"
+
+          # Ждём и убеждаемся что процесс действительно остановлен
+          sleep 3
+          if pgrep -f flush-api > /dev/null; then
+            echo "⚠️ Process still running after systemctl stop, killing forcefully..."
+            sudo pkill -9 -f flush-api
+            sleep 2
+          fi
+
+          # Проверяем что порт 8080 свободен
+          if ss -tuln | grep -q ':8080 '; then
+            echo "⚠️ Port 8080 still in use, freeing it..."
+            sudo lsof -ti:8080 | xargs sudo kill -9 2>/dev/null || true
+            sleep 2
+            
+            if ss -tuln | grep -q ':8080 '; then
+              echo "❌ CRITICAL: Port 8080 could not be freed!"
+              ss -tuln | grep ':8080'
+              exit 1
+            fi
+          fi
+
+          echo "✓ Service stopped, port 8080 is free"
 
           if [ "$ROLLBACK_MODE" = "true" ]; then
             echo "=== ROLLBACK MODE ==="
@@ -358,6 +349,11 @@ jobs:
             echo "❌ services.json MISSING - deployment will likely fail!"
           fi
 
+          # Очищаем старые логи для чистого старта
+          > /opt/flush/logs/app.log 2>/dev/null || true
+          > /opt/flush/logs/error.log 2>/dev/null || true
+          echo "Log files cleared"
+
           # Перезагружаем и запускаем
           sudo systemctl daemon-reload
           sudo systemctl start flush-api
@@ -369,14 +365,18 @@ jobs:
           if ! sudo systemctl is-active --quiet flush-api; then
             echo "❌ Service failed to start!"
             echo ""
-            echo "=== SERVICE STATUS ==="
+            echo "=== REAL APPLICATION LOGS ==="
+            echo "--- /opt/flush/logs/error.log ---"
+            tail -50 /opt/flush/logs/error.log 2>/dev/null || echo "No error log"
+            echo ""
+            echo "--- /opt/flush/logs/app.log ---"
+            tail -50 /opt/flush/logs/app.log 2>/dev/null || echo "No app log"
+            echo ""
+            echo "=== SYSTEMD STATUS ==="
             sudo systemctl status flush-api --no-pager || true
             echo ""
-            echo "=== APPLICATION LOGS (stdout/stderr) ==="
-            sudo journalctl -u flush-api -n 100 --no-pager -o cat
-            echo ""
-            echo "=== SYSTEMD LOGS ==="
-            sudo journalctl -u flush-api -n 50 --no-pager
+            echo "=== JOURNALD LOGS ==="
+            sudo journalctl -u flush-api -n 30 --no-pager
             
             if [ -f /opt/flush/bin/flush-api.bak ]; then
               echo ""
@@ -395,7 +395,7 @@ jobs:
                 echo "✅ Rollback successful"
               else
                 echo "❌ Rollback also failed!"
-                sudo journalctl -u flush-api -n 20 --no-pager -o cat
+                tail -20 /opt/flush/logs/error.log 2>/dev/null || true
               fi
             fi
             
@@ -426,7 +426,10 @@ jobs:
             echo "❌ Health check failed after $MAX_RETRIES attempts"
             echo ""
             echo "=== APPLICATION LOGS ==="
-            sudo journalctl -u flush-api -n 100 --no-pager -o cat
+            tail -100 /opt/flush/logs/app.log 2>/dev/null || true
+            echo ""
+            echo "=== ERROR LOGS ==="
+            tail -100 /opt/flush/logs/error.log 2>/dev/null || true
             
             if [ -f /opt/flush/bin/flush-api.bak ]; then
               echo ""
