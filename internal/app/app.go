@@ -1,13 +1,11 @@
 package app
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"runtime/pprof"
 	"time"
 
 	"github.com/caseapia/goproject-flush/config"
@@ -39,9 +37,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gookit/slog"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/host"
-	"github.com/shirou/gopsutil/v3/mem"
 )
 
 func NewApp() (*fiber.App, error) {
@@ -135,12 +130,6 @@ func NewApp() (*fiber.App, error) {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	app.Get("/debug/stack", func(c *fiber.Ctx) error {
-		var buf bytes.Buffer
-		pprof.Lookup("goroutine").WriteTo(&buf, 2)
-		return c.Type("text/plain").Send(buf.Bytes())
-	})
-
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "http://localhost:3000, http://localhost:8080, https://fe-go-flush.vercel.app, https://dash.dontkillme.lol",
 		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
@@ -173,39 +162,6 @@ func NewApp() (*fiber.App, error) {
 		})
 	}
 
-	app.Get("/api/ping", func(c *fiber.Ctx) error {
-		v, err := mem.VirtualMemory()
-		if err != nil {
-			return err
-		}
-
-		cpuPercent, err := cpu.Percent(time.Millisecond*100, false)
-		if err != nil {
-			return err
-		}
-
-		uptime, err := host.Uptime()
-		if err != nil {
-			return err
-		}
-
-		var cpuUsage float64
-		if len(cpuPercent) > 0 {
-			cpuUsage = cpuPercent[0]
-		}
-
-		return c.JSON(fiber.Map{
-			"status":    "pong",
-			"timestamp": time.Now().Unix(),
-			"system": fiber.Map{
-				"cpu":    cpuUsage,                    // cpu loading
-				"ram":    v.UsedPercent,               // ram loading
-				"ram_gb": v.Used / 1024 / 1024 / 1024, // gb usage
-				"uptime": uptime,                      // server uptime
-			},
-		})
-	})
-
 	api := app.Group("/api")
 
 	public := api.Group("/public")
@@ -227,6 +183,7 @@ func NewApp() (*fiber.App, error) {
 	badgesHandler.RegisterRoutes(private)
 	changelogHandler.RegisterRoutes(private)
 	developerHandler.RegisterRoutes(private)
+	developerHandler.RegisterPublicRoutes(public)
 
 	return app, nil
 }

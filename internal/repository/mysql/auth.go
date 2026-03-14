@@ -25,7 +25,6 @@ func (r *Repository) SearchByLogin(ctx context.Context, login string) (*models.U
 		Model(u).
 		Where("?TableAlias.email = ? OR ?TableAlias.name = ?", login, login).
 		Relation("ActiveBan").
-		Relation("InvitedByUser").
 		Limit(1).
 		Scan(ctx)
 
@@ -39,7 +38,6 @@ func (r *Repository) SearchByID(ctx context.Context, id uint64) (*models.User, e
 		Model(u).
 		Where("?TableAlias.id = ?", id).
 		Relation("ActiveBan").
-		Relation("InvitedByUser").
 		Scan(ctx)
 
 	return u, err

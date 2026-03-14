@@ -1,14 +1,21 @@
 package developer
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"runtime/pprof"
+	"time"
 
 	"github.com/caseapia/goproject-flush/config"
 	"github.com/caseapia/goproject-flush/internal/repository/mysql"
 	"github.com/caseapia/goproject-flush/internal/service/logger"
 	"github.com/caseapia/goproject-flush/pkg/utils/enums"
+	"github.com/gofiber/fiber/v2"
 	"github.com/gookit/slog"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 type Service struct {
@@ -63,4 +70,43 @@ func (s *Service) ServiceInteraction(ctx context.Context, name string, updatedBy
 	}
 
 	return false, err
+}
+
+func (s *Service) DebugStack(c *fiber.Ctx) (string, error) {
+	var buf bytes.Buffer
+
+	pprof.Lookup("goroutine").WriteTo(&buf, 2)
+
+	return buf.String(), nil
+}
+
+func (s *Service) ServerInfo(c *fiber.Ctx) (*int64, *float64, *float64, *uint64, *uint64, error) {
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	cpuPercent, err := cpu.Percent(time.Millisecond*100, false)
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	uptime, err := host.Uptime()
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	var cpuUsage float64
+	if len(cpuPercent) > 0 {
+		cpuUsage = cpuPercent[0]
+	}
+
+	now := time.Now().Unix()
+	usedGB := v.Used / 1024 / 1024 / 1024
+
+	return &now, &cpuUsage, &v.UsedPercent, &usedGB, &uptime, nil
+}
+
+func (s *Service) Ping(c *fiber.Ctx) string {
+	return "ok"
 }

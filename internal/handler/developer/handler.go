@@ -42,3 +42,39 @@ func (h *Handler) ServiceInteraction(c *fiber.Ctx) error {
 		"state":   state,
 	})
 }
+
+func (h *Handler) PopulateDebugTrace(c *fiber.Ctx) error {
+	stack, err := h.service.DebugStack(c)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, fiber.StatusOK, fiber.Map{
+		"stack": stack,
+	})
+}
+
+func (h *Handler) PopulateServerInfo(c *fiber.Ctx) error {
+	time, cpuUsage, usedPercent, usedGB, uptime, err := h.service.ServerInfo(c)
+	if err != nil {
+		return err
+	}
+
+	return utils.Success(c, fiber.StatusOK, fiber.Map{
+		"timestamp": time,
+		"system": fiber.Map{
+			"cpu":    cpuUsage,
+			"ram":    usedPercent,
+			"ram_gb": usedGB,
+			"uptime": uptime,
+		},
+	})
+}
+
+func (h *Handler) Ping(c *fiber.Ctx) error {
+	status := h.service.Ping(c)
+
+	return utils.Success(c, fiber.StatusOK, fiber.Map{
+		"status": status,
+	})
+}

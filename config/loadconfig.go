@@ -14,7 +14,6 @@ func Load() *Config {
 		DiscordProductionRedirectURI: os.Getenv("DISCORD_PRODUCTION_REDIRECT_URI"),
 		AppMode:                      os.Getenv("APP_MODE"),
 	}
-
 	validate(cfg)
 
 	return cfg
