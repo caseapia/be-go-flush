@@ -413,7 +413,7 @@ jobs:
           RETRY_COUNT=0
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping || echo "000")
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/public/ping || echo "000")
             
             if [ "$STATUS" = "200" ]; then
               echo "Health check passed (attempt $((RETRY_COUNT + 1)))"
@@ -460,7 +460,7 @@ jobs:
           CONNECTIONS=$(ss -tn state established '( dport = :443 or sport = :443 )' | wc -l)
 
           # Response time check
-          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/ping || echo "0")
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/public/ping || echo "0")
 
           END_TIME=$(date +%s)
           DEPLOY_DURATION=$((END_TIME - START_TIME))
@@ -520,17 +520,17 @@ jobs:
           echo "Running smoke tests..."
 
           # Test 1: Ping endpoint
-          PING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping)
+          PING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/public/ping)
           echo "ping_test=$PING_STATUS" >> $GITHUB_OUTPUT
 
           # Test 2: Response time
-          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/ping)
+          RESPONSE_TIME=$(curl -s -o /dev/null -w "%{time_total}" https://api.dontkillme.lol/api/public/ping)
           echo "response_time_test=${RESPONSE_TIME}s" >> $GITHUB_OUTPUT
 
           # Test 3: Multiple requests
           SUCCESS_COUNT=0
           for i in {1..10}; do
-            if [ "$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/ping)" = "200" ]; then
+            if [ "$(curl -s -o /dev/null -w "%{http_code}" https://api.dontkillme.lol/api/public/ping)" = "200" ]; then
               SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
             fi
             sleep 0.2
